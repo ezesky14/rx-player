@@ -91,7 +91,6 @@ describe("manifest error management", function () {
     clock.restore();
 
     await sleep(5);
-    expect(player.getManifest()).to.equal(null);
     const error = player.getError();
     expect(error).not.to.equal(null);
     expect(error.type).to.equal(RxPlayer.ErrorTypes.NETWORK_ERROR);
@@ -124,8 +123,6 @@ describe("manifest error management", function () {
     clock.restore();
 
     await sleep(50);
-    expect(player.getManifest()).not.to.equal(null);
-    expect(typeof player.getManifest()).to.equal("object");
     expect(player.getError()).to.equal(null);
   });
 
@@ -162,8 +159,6 @@ describe("manifest error management", function () {
     clock.restore();
 
     await sleep(5000);
-    expect(player.getManifest()).not.to.equal(null);
-    expect(typeof player.getManifest()).to.equal("object");
     expect(player.getError()).to.equal(null);
   });
 
@@ -206,8 +201,6 @@ describe("manifest error management", function () {
     clock.restore();
 
     await sleep(5);
-    expect(player.getManifest()).not.to.equal(null);
-    expect(typeof player.getManifest()).to.equal("object");
     expect(player.getError()).to.equal(null);
   });
 
@@ -255,8 +248,6 @@ describe("manifest error management", function () {
     clock.restore();
 
     await sleep(5);
-    expect(player.getManifest()).not.to.equal(null);
-    expect(typeof player.getManifest()).to.equal("object");
     expect(player.getError()).to.equal(null);
   });
 });

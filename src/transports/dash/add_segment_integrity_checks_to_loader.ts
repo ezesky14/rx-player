@@ -32,8 +32,9 @@ import inferSegmentContainer from "../utils/infer_segment_container";
 export default function addSegmentIntegrityChecks<T>(
   segmentLoader : ISegmentLoader<T>
 ) : ISegmentLoader<T> {
-  return (url, content, initialCancelSignal, callbacks) => {
+  return (url, context, initialCancelSignal, callbacks) => {
     return new PPromise((res, rej) => {
+
       const canceller = new TaskCanceller();
       const unregisterCancelLstnr = initialCancelSignal
         .register(function onCheckCancellation(err : CancellationError) {
@@ -48,13 +49,12 @@ export default function addSegmentIntegrityChecks<T>(
        */
       function cancelAndRejectOnBadIntegrity(data : T) : void {
         if (!(data instanceof Array) && !(data instanceof Uint8Array) ||
-            inferSegmentContainer(content.adaptation.type,
-                                  content.representation) !== "mp4")
+            inferSegmentContainer(context.type, context.mimeType) !== "mp4")
         {
           return;
         }
         try {
-          checkISOBMFFIntegrity(new Uint8Array(data), content.segment.isInit);
+          checkISOBMFFIntegrity(new Uint8Array(data), context.segment.isInit);
         } catch (err) {
           unregisterCancelLstnr();
           canceller.cancel();
@@ -62,7 +62,7 @@ export default function addSegmentIntegrityChecks<T>(
         }
       }
 
-      segmentLoader(url, content, canceller.signal, {
+      segmentLoader(url, context, canceller.signal, {
         ...callbacks,
         onNewChunk(data) {
           cancelAndRejectOnBadIntegrity(data);

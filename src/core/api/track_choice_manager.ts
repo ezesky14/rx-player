@@ -88,7 +88,7 @@ interface ITMVideoRepresentation { id : string|number;
                                    width? : number | undefined;
                                    height? : number | undefined;
                                    codec? : string | undefined;
-                                   frameRate? : string | undefined;
+                                   frameRate? : number | undefined;
                                    hdrInfo?: IHDRInformation | undefined; }
 
 /** Video track returned by the TrackChoiceManager. */

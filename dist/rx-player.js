@@ -12710,9 +12710,6 @@ function prettyPrintInventory(inventory) {
  * limitations under the License.
  */
 
-
-
-
 /**
  * Class allowing to push segments and remove data to a buffer to be able
  * to decode them in the future as well as retrieving information about which
@@ -12858,16 +12855,12 @@ var SegmentBufferOperation;
  * limitations under the License.
  */
 
-    if (this.duration != null && this.start != null) {
-      this.end = this.start + this.duration;
-    }
-  }
-  /**
-   * Returns every `Adaptations` (or `tracks`) linked to that Period, in an
-   * Array.
-   * @returns {Array.<Object>}
-   */
 
+/**
+ * Simulate TimeRanges as returned by SourceBuffer.prototype.buffered.
+ * Add an "insert" and "remove" methods to manually update it.
+ * @class ManualTimeRanges
+ */
 
 var ManualTimeRanges = /*#__PURE__*/function () {
   function ManualTimeRanges() {
@@ -12875,43 +12868,34 @@ var ManualTimeRanges = /*#__PURE__*/function () {
     this.length = 0;
   }
 
-  _proto.getAdaptations = function getAdaptations() {
-    var adaptationsByType = this.adaptations;
-    return Object(object_values["a" /* default */])(adaptationsByType).reduce(function (acc, adaptations) {
-      return (// Note: the second case cannot happen. TS is just being dumb here
-        adaptations != null ? acc.concat(adaptations) : acc
-      );
-    }, []);
-  }
-  /**
-   * Returns every `Adaptations` (or `tracks`) linked to that Period for a
-   * given type.
-   * @param {string} adaptationType
-   * @returns {Array.<Object>}
-   */
-  ;
+  var _proto = ManualTimeRanges.prototype;
 
-  _proto.getAdaptationsForType = function getAdaptationsForType(adaptationType) {
-    var adaptationsForType = this.adaptations[adaptationType];
-    return adaptationsForType == null ? [] : adaptationsForType;
-  }
-  /**
-   * Returns the Adaptation linked to the given ID.
-   * @param {number|string} wantedId
-   * @returns {Object|undefined}
-   */
-  ;
+  _proto.insert = function insert(start, end) {
+    if (false) {}
 
     (0,_utils_ranges__WEBPACK_IMPORTED_MODULE_0__/* .insertInto */ .kR)(this._ranges, {
       start: start,
       end: end
     });
+    this.length = this._ranges.length;
   };
 
-  _proto.getPlayableAdaptations = function getPlayableAdaptations(type) {
-    if (type === undefined) {
-      return this.getAdaptations().filter(function (ada) {
-        return ada.isSupported && ada.decipherable !== false;
+  _proto.remove = function remove(start, end) {
+    if (false) {}
+
+    var rangesToIntersect = [];
+
+    if (start > 0) {
+      rangesToIntersect.push({
+        start: 0,
+        end: start
+      });
+    }
+
+    if (end < Infinity) {
+      rangesToIntersect.push({
+        start: end,
+        end: Infinity
       });
     }
 
@@ -13272,22 +13256,6 @@ var CustomLoaderError = /*#__PURE__*/function (_Error) {
 }( /*#__PURE__*/(0,_babel_runtime_helpers_wrapNativeSuper__WEBPACK_IMPORTED_MODULE_2__/* ["default"] */ .Z)(Error));
 
 
-// CONCATENATED MODULE: ./src/manifest/update_period_in_place.ts
-/**
- * Copyright 2015 CANAL+ Group
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
 
 /***/ }),
 
@@ -13356,10 +13324,6 @@ var EncryptedMediaError = /*#__PURE__*/function (_Error) {
   return EncryptedMediaError;
 }( /*#__PURE__*/(0,_babel_runtime_helpers_wrapNativeSuper__WEBPACK_IMPORTED_MODULE_4__/* ["default"] */ .Z)(Error));
 
-    if (indexOfNewPeriod > prevIndexOfNewPeriod) {
-      oldPeriods.splice(prevIndexOfNewPeriod, indexOfNewPeriod - prevIndexOfNewPeriod);
-      indexOfNewPeriod = prevIndexOfNewPeriod;
-    } // Later Periods can be fully replaced
 
 
 /***/ }),
@@ -13454,23 +13418,19 @@ var ErrorCodes = {
 /* harmony export */   "Z": function() { return /* binding */ errorMessage; }
 /* harmony export */ });
 /**
- * Normalized Manifest structure.
+ * Copyright 2015 CANAL+ Group
  *
- * Details the current content being played:
- *   - the duration of the content
- *   - the available tracks
- *   - the available qualities
- *   - the segments defined in those qualities
- *   - ...
- * while staying agnostic of the transport protocol used (Smooth, DASH etc.).
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
  *
- * The Manifest and its contained information can evolve over time (like when
- * updating a dynamic manifest or when right management forbid some tracks from
- * being played).
- * To perform actions on those changes, any module using this Manifest can
- * listen to its sent events and react accordingly.
+ *     http://www.apache.org/licenses/LICENSE-2.0
  *
- * @class Manifest
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
  */
 
 /**
@@ -13499,19 +13459,6 @@ function errorMessage(name, code, reason) {
 /* harmony import */ var _error_codes__WEBPACK_IMPORTED_MODULE_2__ = __webpack_require__(5992);
 /* harmony import */ var _error_message__WEBPACK_IMPORTED_MODULE_3__ = __webpack_require__(7367);
 
-    _this = _EventEmitter.call(this) || this;
-    var _options$supplementar = options.supplementaryTextTracks,
-        supplementaryTextTracks = _options$supplementar === void 0 ? [] : _options$supplementar,
-        _options$supplementar2 = options.supplementaryImageTracks,
-        supplementaryImageTracks = _options$supplementar2 === void 0 ? [] : _options$supplementar2,
-        representationFilter = options.representationFilter;
-    _this.parsingErrors = [];
-    _this.id = generateNewManifestId();
-    _this.expired = (_a = parsedManifest.expired) !== null && _a !== void 0 ? _a : null;
-    _this.transport = parsedManifest.transportType;
-    _this.clockOffset = parsedManifest.clockOffset;
-    _this.periods = parsedManifest.periods.map(function (parsedPeriod) {
-      var _this$parsingErrors;
 
 
 
@@ -13531,7 +13478,6 @@ function errorMessage(name, code, reason) {
  * limitations under the License.
  */
 
-    /* tslint:disable:deprecation */
 
 /**
  * Error linked to the media Playback.
@@ -13639,11 +13585,7 @@ var NetworkError = /*#__PURE__*/function (_Error) {
    * @param {number} httpErrorCode
    * @returns {Boolean}
    */
-  ;
 
-  _proto.getAdaptations = function getAdaptations() {
-    Object(warn_once["a" /* default */])("manifest.getAdaptations() is deprecated." + " Please use manifest.period[].getAdaptations() instead");
-    var firstPeriod = this.periods[0];
 
   var _proto = NetworkError.prototype;
 
@@ -13690,8 +13632,6 @@ var NetworkError = /*#__PURE__*/function (_Error) {
  * limitations under the License.
  */
 
-    var newImageTracks = _imageTracks.map(function (_ref2) {
-      var _this2$parsingErrors;
 
 /**
  * @class OtherError
@@ -13975,8 +13915,6 @@ var Logger = /*#__PURE__*/function () {
   return Logger;
 }();
 
-	return null;
-}());
 
 ;// CONCATENATED MODULE: ./src/log.ts
 /**
@@ -14130,17 +14068,7 @@ var are_arrays_of_numbers_equal = __webpack_require__(4791);
  * limitations under the License.
  */
 
-/**
- * @param {Object} representation
- * @returns {boolean}
- */
-function isWEBMEmbeddedTrack(representation) {
-  return representation.mimeType === "video/webm" || representation.mimeType === "audio/webm";
-}
 
-/***/ }),
-/* 81 */
-/***/ (function(module, __webpack_exports__, __webpack_require__) {
 
 /**
  * Normalized Representation structure.
@@ -14361,9 +14289,6 @@ var Representation = /*#__PURE__*/function () {
     } // If we are here, this means that we didn't find the corresponding
     // init data type in this.contentProtections.initData.
 
-/***/ }),
-/* 85 */
-/***/ (function(module, __webpack_exports__, __webpack_require__) {
 
     this.contentProtections.initData.push({
       type: initDataType,
@@ -14393,33 +14318,9 @@ var Representation = /*#__PURE__*/function () {
  * limitations under the License.
  */
 
-/**
- * Returns the parent elements which have the given tagName, by order of
- * closeness relative to our element.
- * @param {Element|Node} element
- * @param {string} tagName
- * @returns {Array.<Element>}
- */
-function getParentElementsByTagName(element, tagName) {
-  if (!(element.parentNode instanceof Element)) {
-    return [];
-  }
 
-  function constructArray(_element) {
-    var elements = [];
 
-    if (_element.tagName.toLowerCase() === tagName.toLowerCase()) {
-      elements.push(_element);
-    }
 
-    var parentNode = _element.parentNode;
-
-    if (parentNode instanceof Element) {
-      elements.push.apply(elements, constructArray(parentNode));
-    }
-
-    return elements;
-  }
 
 /** List in an array every possible value for the Adaptation's `type` property. */
 
@@ -15051,9 +14952,19 @@ function updatePeriodInPlace(oldPeriod, newPeriod, updateType) {
 }
 ;// CONCATENATED MODULE: ./src/manifest/update_periods.ts
 /**
- * Returns the a string expliciting the format of a text track in plain text.
- * @param {Object} representation
- * @returns {string}
+ * Copyright 2015 CANAL+ Group
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
  */
 
 
@@ -15103,17 +15014,6 @@ function replacePeriods(oldPeriods, newPeriods) {
   if (remainingNewPeriods.length > 0) {
     oldPeriods.push.apply(oldPeriods, remainingNewPeriods);
   }
-
-  var type = getISOBMFFTextTrackFormat(representation);
-  var textData = extractTextTrackFromISOBMFF(chunkBytes);
-  return {
-    data: textData,
-    type: type,
-    language: adaptation.language,
-    start: startTime,
-    end: endTime,
-    timescale: timescale
-  };
 }
 /**
  * Update old periods by adding new periods and removing
@@ -15944,8 +15844,6 @@ function getBox(buf, boxName) {
  * @returns {Array.<number>|null}
  */
 
-// EXTERNAL MODULE: ./node_modules/rxjs/_esm5/internal/Subscription.js + 1 modules
-var Subscription = __webpack_require__(23);
 
 function getBoxOffsets(buf, boxName) {
   var len = buf.length;
@@ -16027,35 +15925,6 @@ function getUuidContent(buf, id1, id2, id3, id4) {
       boxSize = (0,_utils_byte_parsing__WEBPACK_IMPORTED_MODULE_0__/* .be8toi */ .pV)(buf, currentOffset);
       currentOffset += 8;
     }
-    ConnectableObservable.prototype._subscribe = function (subscriber) {
-        return this.getSubject().subscribe(subscriber);
-    };
-    ConnectableObservable.prototype.getSubject = function () {
-        var subject = this._subject;
-        if (!subject || subject.isStopped) {
-            this._subject = this.subjectFactory();
-        }
-        return this._subject;
-    };
-    ConnectableObservable.prototype.connect = function () {
-        var connection = this._connection;
-        if (!connection) {
-            this._isComplete = false;
-            connection = this._connection = new Subscription["a" /* Subscription */]();
-            connection.add(this.source
-                .subscribe(new ConnectableObservable_ConnectableSubscriber(this.getSubject(), this)));
-            if (connection.closed) {
-                this._connection = null;
-                connection = Subscription["a" /* Subscription */].EMPTY;
-            }
-        }
-        return connection;
-    };
-    ConnectableObservable.prototype.refCount = function () {
-        return Object(refCount["a" /* refCount */])()(this);
-    };
-    return ConnectableObservable;
-}(Observable["a" /* Observable */]));
 
     if (boxName === 0x75756964
     /* === "uuid" */
@@ -16423,7 +16292,19 @@ function getPsshSystemID(buff, initialDataOffset) {
 /* harmony import */ var _get_box__WEBPACK_IMPORTED_MODULE_0__ = __webpack_require__(2297);
 /* harmony import */ var _read__WEBPACK_IMPORTED_MODULE_2__ = __webpack_require__(6807);
 /**
- * Exit fullscreen if an element is currently in fullscreen.
+ * Copyright 2015 CANAL+ Group
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
  */
 
 
@@ -16693,12 +16574,6 @@ function getDurationFromTrun(buffer) {
     if (hasSampleCompositionOffset) {
       cursor += 4;
     }
-
-    return {
-      language: language,
-      closedCaption: closedCaption,
-      normalized: normalizeLanguage(language)
-    };
   }
 
   return duration;
@@ -16758,10 +16633,6 @@ function createPssh(_ref) {
  * @returns {Uint8Array} - The new ISOBMFF generated.
  */
 
- // On Safari 12.1, it seems that since fairplay CDM implementation
-// within the browser is not standard with EME w3c current spec, the
-// requestMediaKeySystemAccess API doesn't resolve positively, even
-// if the drm (fairplay in most cases) is supported.
 
 function patchPssh(buf, psshList) {
   if (psshList == null || psshList.length === 0) {
@@ -16947,10 +16818,6 @@ function parseEmsgBoxes(buffer) {
  * /!\ This file is feature-switchable.
  * It always should be imported through the `features` object.
  */
-function startsWith(completeString, searchString, position) {
-  /* tslint:disable no-unbound-method */
-  if (typeof String.prototype.startsWith === "function") {
-    /* tslint:enable no-unbound-method */
 
 
 /**
@@ -17434,9 +17301,6 @@ function getInitSegment(index, isEMSGWhitelisted) {
  * @param {Number} wantedTime
  * @returns {Number}
  */
-function clearTimelineFromPosition(timeline, firstAvailablePosition) {
-  while (timeline.length > 0) {
-    var firstElt = timeline[0];
 
 function getWantedRepeatIndex(segmentStartTime, segmentDuration, wantedTime) {
   var diff = wantedTime - segmentStartTime;
@@ -17581,11 +17445,6 @@ function processFormatedToken(replacer) {
  * @returns {string}
  */
 
-/**
- * Manifest loader triggered if there was no custom-defined one in the API.
- * @param {string} url
- * @returns {Observable}
- */
 
 function createIndexURLs(baseURLs, media, id, bitrate) {
   if (baseURLs.length === 0) {
@@ -17923,7 +17782,6 @@ function getMaximumPosition(periods) {
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-
 
 /**
  * Returns "first time of reference" from the adaptation given, considering a
@@ -18301,8 +18159,6 @@ var ManifestBoundsCalculator = /*#__PURE__*/function () {
    * @param {number|undefined} positionTime
    */
 
-  function resolveStyleInheritance(styleElt, index) {
-    recursivelyBrowsedIndexes.push(index);
 
   var _proto = ManifestBoundsCalculator.prototype;
 
@@ -18365,8 +18221,6 @@ var ManifestBoundsCalculator = /*#__PURE__*/function () {
   return ManifestBoundsCalculator;
 }();
 
-    styleElt.extendsStyles.length = 0;
-  }
 
 // EXTERNAL MODULE: ./src/utils/array_includes.ts
 var array_includes = __webpack_require__(7714);
@@ -18396,9 +18250,6 @@ function _arrayLikeToArray(arr, len) { if (len == null || len > arr.length) len 
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-
-
-
 
 /**
  * Attach trick mode tracks to adaptations by assigning to the trickModeTracks
@@ -18596,8 +18447,6 @@ var object_assign = __webpack_require__(8026);
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-
-
 
 /**
  * Extract the webm HDR information out of the codec string.
@@ -20125,7 +19974,6 @@ var TemplateRepresentationIndex = /*#__PURE__*/function () {
       return 0; // it is the start of the Period
     } // 1 - check that this index is already available
 
-function _construct(Parent, args, Class) { if (_isNativeReflectConstruct()) { _construct = Reflect.construct; } else { _construct = function _construct(Parent, args, Class) { var a = [null]; a.push.apply(a, args); var Constructor = Function.bind.apply(Parent, a); var instance = new Constructor(); if (Class) _setPrototypeOf(instance, Class.prototype); return instance; }; } return _construct.apply(null, arguments); }
 
     if (this._scaledPeriodEnd === 0 || this._scaledPeriodEnd === undefined) {
       // /!\ The scaled max position augments continuously and might not
@@ -20188,8 +20036,6 @@ function _construct(Parent, args, Class) { if (_isNativeReflectConstruct()) { _c
       // reflect exactly the real server-side value. As segments are
       // generated discretely.
 
-// EXTERNAL MODULE: ./node_modules/rxjs/_esm5/internal/observable/empty.js
-var empty = __webpack_require__(57);
 
       var scaledLastPosition = (lastPos - this._periodStart) * timescale; // Maximum position is before this period.
       // No segment is yet available here
@@ -20394,7 +20240,6 @@ function parse_representations_unsupportedIterableToArray(o, minLen) { if (!o) r
 
 function parse_representations_arrayLikeToArray(arr, len) { if (len == null || len > arr.length) len = arr.length; for (var i = 0, arr2 = new Array(len); i < len; i++) { arr2[i] = arr[i]; } return arr2; }
 
-// CONCATENATED MODULE: ./src/core/eme/attach_media_keys.ts
 /**
  * Copyright 2015 CANAL+ Group
  *
@@ -20653,40 +20498,6 @@ function parse_adaptation_sets_arrayLikeToArray(arr, len) { if (len == null || l
 
 
 
-/**
- * Close session and returns and observable that emits when
- * the session is closed.
- * @param {MediaKeySession|Object} session
- * @returns {Observable}
- */
-
-function closeSession$(session) {
-  return Object(race["a" /* race */])(Object(cast_to_observable["a" /* default */])(session.close()), // If the session is not closed after 1000ms, try
-  // to call another method on session to guess if
-  // session is closed or not.
-  Object(timer["a" /* timer */])(1000).pipe(Object(mergeMap["a" /* mergeMap */])(function () {
-    var tryToUpdateSession$ = Object(cast_to_observable["a" /* default */])(session.update(new Uint8Array(1)));
-    return tryToUpdateSession$.pipe( // Update has resolved, so we can't know if session is closed
-    Object(map["a" /* map */])(function () {
-      throw new Error("Compat: Couldn't know if session is " + "closed");
-    }), Object(catchError["a" /* catchError */])(function (err) {
-      // The caught error can tell if session is closed
-      // (Chrome may throw this error)
-      if (err instanceof Error && err.message === "The session is already closed.") {
-        return Object(of["a" /* of */])(null);
-      } // The `closed` promise may resolve, even if `close()` result has not
-      // (it may happen on Firefox). Wait for it and timeout after 1 second.
-
-
-      var sessionIsClosed$ = Object(cast_to_observable["a" /* default */])(session.closed);
-      return Object(race["a" /* race */])(sessionIsClosed$, Object(timer["a" /* timer */])(1000).pipe(Object(map["a" /* map */])(function () {
-        throw new Error("Compat: Couldn't know if session is " + "closed");
-      })));
-    }));
-  })));
-}
-// EXTERNAL MODULE: ./src/utils/is_null_or_undefined.ts
-var is_null_or_undefined = __webpack_require__(7);
 
  // eslint-disable-next-line max-len
 
@@ -20694,7 +20505,6 @@ var is_null_or_undefined = __webpack_require__(7);
 
 
 
-// CONCATENATED MODULE: ./src/utils/hash_buffer.ts
 /**
  * Detect if the accessibility given defines an adaptation for the visually
  * impaired.
@@ -20719,10 +20529,7 @@ function isVisuallyImpaired(accessibility) {
  * @param {Object} accessibility
  * @returns {Boolean}
  */
-function hashBuffer(buffer) {
-  var hash = 0;
 
-  var _char;
 
 function isHardOfHearing(accessibility) {
   if (accessibility == null) {
@@ -20858,7 +20665,6 @@ function parseAdaptationSets(adaptationsIR, periodInfos) {
    * This is used to put main AdaptationSet first in the resulting array of
    * Adaptation while still preserving the MPD order among them.
    */
-  ;
 
   var lastMainAdaptationIndex = {}; // first sort AdaptationSets by absolute priority.
 
@@ -21121,6 +20927,7 @@ function parse_periods_arrayLikeToArray(arr, len) { if (len == null || len > arr
 
 
 
+
  // eslint-disable-next-line max-len
 
 
@@ -21242,11 +21049,6 @@ function parsePeriods(periodsIR, contextInfos) {
   for (var i = periodsIR.length - 1; i >= 0; i--) {
     _loop(i);
   }
-  /**
-   * Returns the number of stored MediaKeySessions in this LoadedSessionsStore.
-   * @returns {number}
-   */
-  ;
 
   if (contextInfos.isDynamic && !manifestBoundsCalculator.lastPositionIsKnown()) {
     // Guess a last time the last position
@@ -21438,9 +21240,13 @@ function parse_mpd_unsupportedIterableToArray(o, minLen) { if (!o) return; if (t
 function parse_mpd_arrayLikeToArray(arr, len) { if (len == null || len > arr.length) len = arr.length; for (var i = 0, arr2 = new Array(len); i < len; i++) { arr2[i] = arr[i]; } return arr2; }
 
 /**
- * Set representing persisted licenses. Depends on a simple local-
- * storage implementation with a `save`/`load` synchronous interface
- * to persist information on persisted sessions.
+ * Copyright 2015 CANAL+ Group
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -21749,9 +21555,19 @@ var base64 = __webpack_require__(9689);
 
 
 /**
- * @throws {EncryptedMediaError}
- * @param {Object} keySystemOptions
- * @returns {Object|null}
+ * Copyright 2015 CANAL+ Group
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
  */
 // XML-Schema
 
@@ -21760,9 +21576,6 @@ var base64 = __webpack_require__(9689);
 
 /* eslint-enable max-len */
 
-  if (licenseStorage == null) {
-    throw new encrypted_media_error["a" /* default */]("INVALID_KEY_SYSTEM", "No license storage found for persistent license.");
-  }
 
 
 var iso8601Duration = /^P(([\d.]*)Y)?(([\d.]*)M)?(([\d.]*)D)?T?(([\d.]*)H)?(([\d.]*)M)?(([\d.]*)S)?/;
@@ -22079,19 +21892,13 @@ var MPDError = /*#__PURE__*/function (_Error) {
 
 ;// CONCATENATED MODULE: ./src/parsers/manifest/dash/js-parser/node_parsers/BaseURL.ts
 /**
- * Retry the given observable (if it triggers an error) with an exponential
- * backoff.
- * The backoff behavior can be tweaked through the options given.
+ * Copyright 2015 CANAL+ Group
  *
- * @param {Observable} obs$
- * @param {Object} options - Configuration object.
- * This object contains the following properties:
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
  *
- *   - retryDelay {Number} - The initial delay, in ms.
- *     This delay will be fuzzed to fall under the range +-30% each time a new
- *     retry is done.
- *     Then, this delay will be multiplied by 2^(n-1), n being the counter of
- *     retry we performed (beginning at 1 for the first retry).
+ *     http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -22158,11 +21965,6 @@ function parseBaseURL(root) {
  * limitations under the License.
  */
 
-var KEY_STATUSES = {
-  EXPIRED: "expired",
-  INTERNAL_ERROR: "internal-error",
-  OUTPUT_RESTRICTED: "output-restricted"
-};
 /**
  * Parse a "ContentComponent" Element in a DASH MPD.
  * @param {Element} root
@@ -22205,30 +22007,14 @@ function parseContentComponent(root) {
  *
  *     http://www.apache.org/licenses/LICENSE-2.0
  *
- * Throws if one of the keyID is on an error.
- * @param {MediaKeySession} session - The MediaKeySession from which the keys
- * will be checked.
- * @param {Object} keySystem - Configuration. Used to known on which situations
- * we can fallback.
- * @returns {Array} - Warnings to send and blacklisted key ids.
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
  */
 
-function checkKeyStatuses(session, keySystem) {
-  var warnings = [];
-  var blacklistedKeyIDs = [];
-  var _keySystem$fallbackOn = keySystem.fallbackOn,
-      fallbackOn = _keySystem$fallbackOn === void 0 ? {} : _keySystem$fallbackOn;
-  /* tslint:disable no-unsafe-any */
 
-  session.keyStatuses.forEach(function (_arg1, _arg2) {
-    /* tslint:enable no-unsafe-any */
-    // Hack present because the order of the arguments has changed in spec
-    // and is not the same between some versions of Edge and Chrome.
-    var _ref = function () {
-      return typeof _arg1 === "string" ? [_arg1, _arg2] : [_arg2, _arg1];
-    }(),
-        keyStatus = _ref[0],
-        keyId = _ref[1];
 
 /**
  * @param {NodeList} contentProtectionChildren
@@ -22362,11 +22148,19 @@ function parseInitialization(root) {
 }
 ;// CONCATENATED MODULE: ./src/parsers/manifest/dash/js-parser/node_parsers/SegmentBase.ts
 /**
- * Error thrown when the MediaKeySession is blacklisted.
- * Such MediaKeySession should not be re-used but other MediaKeySession for the
- * same content can still be used.
- * @class BlacklistedSessionError
- * @extends Error
+ * Copyright 2015 CANAL+ Group
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
  */
 
 
@@ -22471,24 +22265,21 @@ function parseSegmentBase(root) {
 }
 ;// CONCATENATED MODULE: ./src/parsers/manifest/dash/js-parser/node_parsers/SegmentURL.ts
 /**
- * @param {MediaKeySession} session - The MediaKeySession concerned.
- * @param {Object} keySystem - The key system configuration.
- * @returns {Observable}
+ * Copyright 2015 CANAL+ Group
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
  */
 
-
-function getKeyStatusesEvents(session, keySystem) {
-  var _checkKeyStatuses = checkKeyStatuses(session, keySystem),
-      warnings = _checkKeyStatuses[0],
-      blacklistedKeyIDs = _checkKeyStatuses[1];
-
-  var warnings$ = warnings.length > 0 ? of["a" /* of */].apply(void 0, warnings) : empty["a" /* EMPTY */];
-  var blackListUpdate$ = blacklistedKeyIDs.length > 0 ? Object(of["a" /* of */])({
-    type: "blacklist-keys",
-    value: blacklistedKeyIDs
-  }) : empty["a" /* EMPTY */];
-  return Object(concat["a" /* concat */])(warnings$, blackListUpdate$);
-}
 /**
  * Parse a SegmentURL element into a SegmentURL intermediate
  * representation.
@@ -23487,39 +23278,9 @@ function parseEvent(element) {
  * limitations under the License.
  */
 
-/**
- * Returns the name of the current key system used.
- * @param {HTMLMediaElement} mediaElement
- * @returns {string|null}
- */
 
-function getCurrentKeySystem(mediaElement) {
-  var currentState = _media_keys_infos_store__WEBPACK_IMPORTED_MODULE_0__[/* default */ "a"].getState(mediaElement);
-  return currentState == null ? null : currentState.keySystemOptions.type;
-}
 
-/***/ }),
-/* 161 */
-/***/ (function(module, __webpack_exports__, __webpack_require__) {
 
-"use strict";
-/* harmony export (binding) */ __webpack_require__.d(__webpack_exports__, "a", function() { return isCodecSupported; });
-/* harmony import */ var _browser_compatibility_types__WEBPACK_IMPORTED_MODULE_0__ = __webpack_require__(32);
-/**
- * Copyright 2015 CANAL+ Group
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
 
 /**
  * @param {NodeList} periodChildren
@@ -24489,8 +24250,6 @@ function updateSegmentTimeline(oldTimeline, newTimeline) {
   return;
 }
 
-
-
 /***/ }),
 
 /***/ 5734:
@@ -24522,6 +24281,10 @@ function updateSegmentTimeline(oldTimeline, newTimeline) {
 // corresponding Class should be on the P elements. If we fail to find the
 // language in a "lang" property of a CSS class, the parser will throw.
 
+/**
+ * /!\ This file is feature-switchable.
+ * It always should be imported through the `features` object.
+ */
 
 var HTML_ENTITIES = /&#([0-9]+);/g;
 var BR = /<br>/gi;
@@ -24543,45 +24306,12 @@ function getClassNameByLang(str) {
     var name = m[1];
     var lang = getCSSProperty(m[2], "lang");
 
-
-var QueueAction_QueueAction = /*@__PURE__*/ (function (_super) {
-    tslib_es6["a" /* __extends */](QueueAction, _super);
-    function QueueAction(scheduler, work) {
-        var _this = _super.call(this, scheduler, work) || this;
-        _this.scheduler = scheduler;
-        _this.work = work;
-        return _this;
+    if (name != null && lang != null) {
+      langs[lang] = name;
     }
-    QueueAction.prototype.schedule = function (state, delay) {
-        if (delay === void 0) {
-            delay = 0;
-        }
-        if (delay > 0) {
-            return _super.prototype.schedule.call(this, state, delay);
-        }
-        this.delay = delay;
-        this.state = state;
-        this.scheduler.flush(this);
-        return this;
-    };
-    QueueAction.prototype.execute = function (state, delay) {
-        return (delay > 0 || this.closed) ?
-            _super.prototype.execute.call(this, state, delay) :
-            this._execute(state, delay);
-    };
-    QueueAction.prototype.requestAsyncId = function (scheduler, id, delay) {
-        if (delay === void 0) {
-            delay = 0;
-        }
-        if ((delay !== null && delay > 0) || (delay === null && this.delay > 0)) {
-            return _super.prototype.requestAsyncId.call(this, scheduler, id, delay);
-        }
-        return scheduler.flush(this);
-    };
-    return QueueAction;
-}(AsyncAction["a" /* AsyncAction */]));
 
-//# sourceMappingURL=QueueAction.js.map
+    m = ruleRe.exec(str);
+  }
 
   return langs;
 }
@@ -24609,8 +24339,6 @@ function getPCSSRules(str) {
  * @returns {string|null} - value of the property. Null if not found.
  */
 
-// CONCATENATED MODULE: ./node_modules/rxjs/_esm5/internal/scheduler/QueueScheduler.js
-/** PURE_IMPORTS_START tslib,_AsyncScheduler PURE_IMPORTS_END */
 
 function getCSSProperty(str, name) {
   var matches = new RegExp("\\s*" + name + ":\\s*(\\S+);", "i").exec(str);
@@ -24621,13 +24349,6 @@ function getCSSProperty(str, name) {
  * @returns {string}
  */
 
-var QueueScheduler_QueueScheduler = /*@__PURE__*/ (function (_super) {
-    tslib_es6["a" /* __extends */](QueueScheduler, _super);
-    function QueueScheduler() {
-        return _super !== null && _super.apply(this, arguments) || this;
-    }
-    return QueueScheduler;
-}(AsyncScheduler["a" /* AsyncScheduler */]));
 
 function decodeEntities(text) {
   return text.replace(HTML_ENTITIES, function (_, $1) {
@@ -24646,8 +24367,6 @@ function decodeEntities(text) {
  * @param {string} lang
  */
 
-// CONCATENATED MODULE: ./node_modules/rxjs/_esm5/internal/scheduler/queue.js
-/** PURE_IMPORTS_START _QueueAction,_QueueScheduler PURE_IMPORTS_END */
 
 function parseSami(smi, timeOffset, lang) {
   var syncOpen = /<sync[ >]/ig;
@@ -24667,15 +24386,22 @@ function parseSami(smi, timeOffset, lang) {
   if ((0,_utils_is_non_empty_string__WEBPACK_IMPORTED_MODULE_0__/* ["default"] */ .Z)(lang)) {
     klass = langs[lang];
 
-// EXTERNAL MODULE: ./node_modules/rxjs/_esm5/internal/Subscriber.js
-var Subscriber = __webpack_require__(12);
+    if (klass === undefined) {
+      throw new Error("sami: could not find lang " + lang + " in CSS");
+    }
+  }
 
-// EXTERNAL MODULE: ./node_modules/rxjs/_esm5/internal/Notification.js
-var Notification = __webpack_require__(81);
+  while (true) {
+    up = syncOpen.exec(smi);
+    to = syncClose.exec(smi);
 
-// CONCATENATED MODULE: ./node_modules/rxjs/_esm5/internal/operators/observeOn.js
-/** PURE_IMPORTS_START tslib,_Subscriber,_Notification PURE_IMPORTS_END */
+    if (up === null && to === null) {
+      break;
+    }
 
+    if (up === null || to === null || up.index >= to.index) {
+      throw new Error("parse error");
+    }
 
     var str = smi.slice(up.index, to.index);
     var tim = START.exec(str);
@@ -24683,55 +24409,15 @@ var Notification = __webpack_require__(81);
     if (!Array.isArray(tim)) {
       throw new Error("parse error (sync time attribute)");
     }
-    ObserveOnOperator.prototype.call = function (subscriber, source) {
-        return source.subscribe(new observeOn_ObserveOnSubscriber(subscriber, this.scheduler, this.delay));
-    };
-    return ObserveOnOperator;
-}());
 
-var observeOn_ObserveOnSubscriber = /*@__PURE__*/ (function (_super) {
-    tslib_es6["a" /* __extends */](ObserveOnSubscriber, _super);
-    function ObserveOnSubscriber(destination, scheduler, delay) {
-        if (delay === void 0) {
-            delay = 0;
-        }
-        var _this = _super.call(this, destination) || this;
-        _this.scheduler = scheduler;
-        _this.delay = delay;
-        return _this;
+    var start = +tim[1];
+
+    if (isNaN(start)) {
+      throw new Error("parse error (sync time attribute NaN)");
     }
-    ObserveOnSubscriber.dispatch = function (arg) {
-        var notification = arg.notification, destination = arg.destination;
-        notification.observe(destination);
-        this.unsubscribe();
-    };
-    ObserveOnSubscriber.prototype.scheduleMessage = function (notification) {
-        var destination = this.destination;
-        destination.add(this.scheduler.schedule(ObserveOnSubscriber.dispatch, this.delay, new ObserveOnMessage(notification, this.destination)));
-    };
-    ObserveOnSubscriber.prototype._next = function (value) {
-        this.scheduleMessage(Notification["a" /* Notification */].createNext(value));
-    };
-    ObserveOnSubscriber.prototype._error = function (err) {
-        this.scheduleMessage(Notification["a" /* Notification */].createError(err));
-        this.unsubscribe();
-    };
-    ObserveOnSubscriber.prototype._complete = function () {
-        this.scheduleMessage(Notification["a" /* Notification */].createComplete());
-        this.unsubscribe();
-    };
-    return ObserveOnSubscriber;
-}(Subscriber["a" /* Subscriber */]));
 
-var ObserveOnMessage = /*@__PURE__*/ (function () {
-    function ObserveOnMessage(notification, destination) {
-        this.notification = notification;
-        this.destination = destination;
-    }
-    return ObserveOnMessage;
-}());
-
-//# sourceMappingURL=observeOn.js.map
+    appendToSubs(str.split("\n"), start / 1000);
+  }
 
   return subs;
 
@@ -24795,91 +24481,8 @@ var ObserveOnMessage = /*@__PURE__*/ (function () {
         });
       }
     }
-    ReplaySubject.prototype.nextInfiniteTimeWindow = function (value) {
-        var _events = this._events;
-        _events.push(value);
-        if (_events.length > this._bufferSize) {
-            _events.shift();
-        }
-        _super.prototype.next.call(this, value);
-    };
-    ReplaySubject.prototype.nextTimeWindow = function (value) {
-        this._events.push(new ReplayEvent(this._getNow(), value));
-        this._trimBufferThenGetEvents();
-        _super.prototype.next.call(this, value);
-    };
-    ReplaySubject.prototype._subscribe = function (subscriber) {
-        var _infiniteTimeWindow = this._infiniteTimeWindow;
-        var _events = _infiniteTimeWindow ? this._events : this._trimBufferThenGetEvents();
-        var scheduler = this.scheduler;
-        var len = _events.length;
-        var subscription;
-        if (this.closed) {
-            throw new ObjectUnsubscribedError["a" /* ObjectUnsubscribedError */]();
-        }
-        else if (this.isStopped || this.hasError) {
-            subscription = Subscription["a" /* Subscription */].EMPTY;
-        }
-        else {
-            this.observers.push(subscriber);
-            subscription = new SubjectSubscription["a" /* SubjectSubscription */](this, subscriber);
-        }
-        if (scheduler) {
-            subscriber.add(subscriber = new observeOn_ObserveOnSubscriber(subscriber, scheduler));
-        }
-        if (_infiniteTimeWindow) {
-            for (var i = 0; i < len && !subscriber.closed; i++) {
-                subscriber.next(_events[i]);
-            }
-        }
-        else {
-            for (var i = 0; i < len && !subscriber.closed; i++) {
-                subscriber.next(_events[i].value);
-            }
-        }
-        if (this.hasError) {
-            subscriber.error(this.thrownError);
-        }
-        else if (this.isStopped) {
-            subscriber.complete();
-        }
-        return subscription;
-    };
-    ReplaySubject.prototype._getNow = function () {
-        return (this.scheduler || queue).now();
-    };
-    ReplaySubject.prototype._trimBufferThenGetEvents = function () {
-        var now = this._getNow();
-        var _bufferSize = this._bufferSize;
-        var _windowTime = this._windowTime;
-        var _events = this._events;
-        var eventsCount = _events.length;
-        var spliceCount = 0;
-        while (spliceCount < eventsCount) {
-            if ((now - _events[spliceCount].time) < _windowTime) {
-                break;
-            }
-            spliceCount++;
-        }
-        if (eventsCount > _bufferSize) {
-            spliceCount = Math.max(spliceCount, eventsCount - _bufferSize);
-        }
-        if (spliceCount > 0) {
-            _events.splice(0, spliceCount);
-        }
-        return _events;
-    };
-    return ReplaySubject;
-}(Subject["a" /* Subject */]));
-
-var ReplayEvent = /*@__PURE__*/ (function () {
-    function ReplayEvent(time, value) {
-        this.time = time;
-        this.value = value;
-    }
-    return ReplayEvent;
-}());
-//# sourceMappingURL=ReplaySubject.js.map
+  }
+}
 
 /* harmony default export */ __webpack_exports__["Z"] = (parseSami);
 
@@ -24912,21 +24515,6 @@ var ReplayEvent = /*@__PURE__*/ (function () {
  * It always should be imported through the `features` object.
  */
 
-function startWith() {
-    var array = [];
-    for (var _i = 0; _i < arguments.length; _i++) {
-        array[_i] = arguments[_i];
-    }
-    var scheduler = array[array.length - 1];
-    if (Object(_util_isScheduler__WEBPACK_IMPORTED_MODULE_1__[/* isScheduler */ "a"])(scheduler)) {
-        array.pop();
-        return function (source) { return Object(_observable_concat__WEBPACK_IMPORTED_MODULE_0__[/* concat */ "a"])(array, source, scheduler); };
-    }
-    else {
-        return function (source) { return Object(_observable_concat__WEBPACK_IMPORTED_MODULE_0__[/* concat */ "a"])(array, source); };
-    }
-}
-//# sourceMappingURL=startWith.js.map
 
 var HTML_ENTITIES = /&#([0-9]+);/g;
 var BR = /<br>/gi;
@@ -24956,24 +24544,7 @@ function createCuesFromArray(cuesArray) {
         nativeCues.push(cue);
       }
     }
-    MapToOperator.prototype.call = function (subscriber, source) {
-        return source.subscribe(new MapToSubscriber(subscriber, this.value));
-    };
-    return MapToOperator;
-}());
-var MapToSubscriber = /*@__PURE__*/ (function (_super) {
-    tslib__WEBPACK_IMPORTED_MODULE_0__[/* __extends */ "a"](MapToSubscriber, _super);
-    function MapToSubscriber(destination, value) {
-        var _this = _super.call(this, destination) || this;
-        _this.value = value;
-        return _this;
-    }
-    MapToSubscriber.prototype._next = function (x) {
-        this.destination.next(this.value);
-    };
-    return MapToSubscriber;
-}(_Subscriber__WEBPACK_IMPORTED_MODULE_1__[/* Subscriber */ "a"]));
-//# sourceMappingURL=mapTo.js.map
+  }
 
   return nativeCues;
 }
@@ -24993,18 +24564,21 @@ function getClassNameByLang(str) {
     var name = m[1];
     var lang = getCSSProperty(m[2], "lang");
 
+    if (name != null && lang != null) {
+      langs[lang] = name;
+    }
 
+    m = ruleRe.exec(str);
+  }
 
+  return langs;
+}
 /**
  * @param {string} str - entire CSS rule
  * @param {string} name - name of the property
  * @returns {string|null} - value of the property. Null if not found.
  */
 
-    if (name === wantedName) {
-      if (i + size <= len) {
-        return i;
-      }
 
 function getCSSProperty(str, name) {
   var matches = new RegExp("\\s*" + name + ":\\s*(\\S+);", "i").exec(str);
@@ -25016,8 +24590,6 @@ function getCSSProperty(str, name) {
  * @returns {string}
  */
 
-    i += size;
-  }
 
 function decodeEntities(text) {
   return text.replace(BR, "\n").replace(HTML_ENTITIES, function (_, $1) {
@@ -25025,8 +24597,11 @@ function decodeEntities(text) {
   });
 }
 /**
- * Parse the sidx part (segment index) of the isobmff.
- * Returns null if not found.
+ * Because sami is not really html... we have to use
+ * some kind of regular expressions to parse it...
+ * the cthulhu way :)
+ * The specification being quite clunky, this parser
+ * may not work for every sami input.
  *
  * @param {string} smi
  * @param {Number} timeOffset
@@ -25052,22 +24627,22 @@ function parseSami(smi, timeOffset, lang) {
   if ((0,_utils_is_non_empty_string__WEBPACK_IMPORTED_MODULE_0__/* ["default"] */ .Z)(lang)) {
     klass = langs[lang];
 
-  if (index === -1) {
-    return null;
+    if (klass === undefined) {
+      throw new Error("sami: could not find lang " + lang + " in CSS");
+    }
   }
 
-  var offset = initialOffset;
-  var size = Object(_utils_byte_parsing__WEBPACK_IMPORTED_MODULE_2__[/* be4toi */ "c"])(buf, index);
-  var pos = index +
-  /* size */
-  4 +
-  /* name */
-  4;
-  /* version(8) */
+  while (true) {
+    up = syncOpen.exec(smi);
+    to = syncClose.exec(smi);
 
-  /* flags(24) */
+    if (up === null && to === null) {
+      break;
+    }
 
-  /* reference_ID(32); */
+    if (up === null || to === null || up.index >= to.index) {
+      throw new Error("parse error");
+    }
 
     var str = smi.slice(up.index, to.index);
     var tim = START.exec(str);
@@ -25076,22 +24651,13 @@ function parseSami(smi, timeOffset, lang) {
       throw new Error("parse error (sync time attribute)");
     }
 
-  /* first_offset(32 / 64) */
+    var start = +tim[1];
 
-  var time;
+    if (isNaN(start)) {
+      throw new Error("parse error (sync time attribute NaN)");
+    }
 
-  if (version === 0) {
-    time = Object(_utils_byte_parsing__WEBPACK_IMPORTED_MODULE_2__[/* be4toi */ "c"])(buf, pos);
-    pos += 4;
-    offset += Object(_utils_byte_parsing__WEBPACK_IMPORTED_MODULE_2__[/* be4toi */ "c"])(buf, pos) + size;
-    pos += 4;
-  } else if (version === 1) {
-    time = Object(_utils_byte_parsing__WEBPACK_IMPORTED_MODULE_2__[/* be8toi */ "d"])(buf, pos);
-    pos += 8;
-    offset += Object(_utils_byte_parsing__WEBPACK_IMPORTED_MODULE_2__[/* be8toi */ "d"])(buf, pos) + size;
-    pos += 8;
-  } else {
-    return null;
+    appendToSubs(str.split("\n"), start / 1000);
   }
 
   return createCuesFromArray(subs);
@@ -25249,21 +24815,35 @@ function getCueBlocks(linified) {
 /* harmony import */ var _get_cue_blocks__WEBPACK_IMPORTED_MODULE_0__ = __webpack_require__(2061);
 /* harmony import */ var _parse_cue__WEBPACK_IMPORTED_MODULE_1__ = __webpack_require__(788);
 /**
- * Parse track Fragment Decode Time to get a precize initial time for this
- * segment (in the media timescale).
- * Stops at the first tfdt encountered from the beginning of the file.
- * Returns this time. -1 if not found.
- * @param {Uint8Array} buffer
- * @returns {Number}
+ * Copyright 2015 CANAL+ Group
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
  */
 
+/**
+ * /!\ This file is feature-switchable.
+ * It always should be imported through the `features` object.
+ */
+// Parse SRT subtitles into HTML.
+// Done for fun. Understand <b>, <i>, <u> and <font color="#ff0000" /> type
+// of tags.
 
-function getTrackFragmentDecodeTime(buffer) {
-  var traf = Object(_read__WEBPACK_IMPORTED_MODULE_4__[/* getTRAF */ "c"])(buffer);
 
-  if (traf === null) {
-    return -1;
-  }
+/**
+ * @param {string} srtStr
+ * @param {Number} timeOffset
+ * @returns {Array.<Object>}
+ */
 
 function parseSRTStringToHTML(srtStr, timeOffset) {
   // Even if srt only authorize CRLF, we will also take LF or CR as line
@@ -25275,105 +24855,104 @@ function parseSRTStringToHTML(srtStr, timeOffset) {
   for (var i = 0; i < cueBlocks.length; i++) {
     var cueObject = (0,_parse_cue__WEBPACK_IMPORTED_MODULE_1__/* ["default"] */ .Z)(cueBlocks[i], timeOffset);
 
-  var pos = index +
-  /* size */
-  4 +
-  /* name */
-  4;
-  var version = traf[pos];
-  pos += 4;
+    if (cueObject != null) {
+      var htmlCue = toHTML(cueObject);
 
-  if (version > 1) {
-    return -1;
+      if (htmlCue != null) {
+        cues.push(htmlCue);
+      }
+    }
   }
 
-  return version !== 0 ? Object(_utils_byte_parsing__WEBPACK_IMPORTED_MODULE_2__[/* be8toi */ "d"])(traf, pos) : Object(_utils_byte_parsing__WEBPACK_IMPORTED_MODULE_2__[/* be4toi */ "c"])(traf, pos);
+  return cues;
 }
 /**
- * @param {Uint8Array} traf
- * @returns {number}
+ * @param {Array.<string>} cueLines
+ * @param {Number} timeOffset
+ * @returns {Object|null}
+ */
+
+function toHTML(cueObj) {
+  var start = cueObj.start,
+      end = cueObj.end,
+      payload = cueObj.payload;
+  var pEl = document.createElement("div");
+  pEl.className = "rxp-texttrack-p";
+  pEl.style.fontSize = "28px";
+  pEl.style.position = "absolute";
+  pEl.style.bottom = "5%";
+  pEl.style.width = "100%";
+  pEl.style.textAlign = "center";
+  pEl.style.color = "#fff";
+  pEl.style.textShadow = "-1px -1px 2px #000," + "1px -1px 2px #000," + "-1px 1px 2px #000," + "1px 1px 2px #000";
+
+  for (var i = 0; i < payload.length; i++) {
+    if (i !== 0) {
+      pEl.appendChild(document.createElement("br"));
+    }
+
+    var span = generateSpansFromSRTText(payload[i]);
+    pEl.appendChild(span);
+  }
+
+  return {
+    start: start,
+    end: end,
+    element: pEl
+  };
+}
+/**
+ * Take a single srt line and convert it into a span with the right style while
+ * avoiding XSS.
+ * What we do is set a whitelist of authorized tags, and recreate the
+ * corresponding tag from scratch.
+ * Supported tags:
+ *   - <b>: make content bold
+ *   - <i>: make content italic
+ *   - <u>: draw underline on content
+ *   - <font color="x">: add color x to the content
+ * @param {string} text
+ * @returns {HTMLElement}
  */
 
 
-function getDefaultDurationFromTFHDInTRAF(traf) {
-  var index = findBox(traf, 0x74666864
-  /* tfhd */
-  );
+function generateSpansFromSRTText(text) {
+  var secureDiv = document.createElement("div");
+  secureDiv.innerHTML = text;
 
-  if (index === -1) {
-    return -1;
-  }
+  var _loop = function _loop(node) {
+    var childNodes = node.childNodes;
+    var span = document.createElement("span");
+    span.className = "rxp-texttrack-span";
 
-  var pos = index +
-  /* size */
-  4 +
-  /* name */
-  4 +
-  /* version */
-  1;
-  var flags = Object(_utils_byte_parsing__WEBPACK_IMPORTED_MODULE_2__[/* be3toi */ "b"])(traf, pos);
-  pos += 3;
-  var hasBaseDataOffset = flags & 0x000001;
-  var hasSampleDescriptionIndex = flags & 0x000002;
-  var hasDefaultSampleDuration = flags & 0x000008;
+    for (var i = 0; i < childNodes.length; i++) {
+      var currentNode = childNodes[i];
 
-  if (hasDefaultSampleDuration === 0) {
-    return -1;
-  }
+      if (currentNode.nodeName === "#text") {
+        var linifiedText = currentNode.wholeText.split("\n");
 
-  pos += 4;
+        for (var line = 0; line < linifiedText.length; line++) {
+          if (line !== 0) {
+            span.appendChild(document.createElement("br"));
+          }
 
-  if (hasBaseDataOffset !== 0) {
-    pos += 8;
-  }
+          if (linifiedText[line].length > 0) {
+            var textNode = document.createTextNode(linifiedText[line]);
+            span.appendChild(textNode);
+          }
+        }
+      } else if (currentNode.nodeName === "B") {
+        var spanChild = _loop(currentNode);
 
-  if (hasSampleDescriptionIndex !== 0) {
-    pos += 4;
-  }
+        spanChild.style.fontWeight = "bold";
+        span.appendChild(spanChild);
+      } else if (currentNode.nodeName === "I") {
+        var _spanChild = _loop(currentNode);
 
-  var defaultDuration = Object(_utils_byte_parsing__WEBPACK_IMPORTED_MODULE_2__[/* be4toi */ "c"])(traf, pos);
-  return defaultDuration;
-}
-/**
- * @param {Uint8Array} buffer
- * @returns {number}
- */
-
-
-function getDurationFromTrun(buffer) {
-  var traf = Object(_read__WEBPACK_IMPORTED_MODULE_4__[/* getTRAF */ "c"])(buffer);
-
-  if (traf === null) {
-    return -1;
-  }
-
-  var index = findBox(traf, 0x7472756E
-  /* trun */
-  );
-
-  if (index === -1) {
-    return -1;
-  }
-
-  var pos = index +
-  /* size */
-  4 +
-  /* name */
-  4;
-  var version = traf[pos];
-  pos += 1;
-
-  if (version > 1) {
-    return -1;
-  }
-
-  var flags = Object(_utils_byte_parsing__WEBPACK_IMPORTED_MODULE_2__[/* be3toi */ "b"])(traf, pos);
-  pos += 3;
-  var hasSampleDuration = flags & 0x000100;
-  var defaultDuration = 0;
-
-  if (hasSampleDuration === 0) {
-    defaultDuration = getDefaultDurationFromTFHDInTRAF(traf);
+        _spanChild.style.fontStyle = "italic";
+        span.appendChild(_spanChild);
+      } else if (currentNode.nodeName === "U") {
+        var _spanChild2 = _loop(currentNode);
 
         _spanChild2.style.textDecoration = "underline";
         span.appendChild(_spanChild2);
@@ -25386,17 +24965,12 @@ function getDurationFromTrun(buffer) {
       } else {
         var _spanChild4 = _loop(currentNode);
 
-  while (i-- > 0) {
-    if (hasSampleDuration !== 0) {
-      duration += Object(_utils_byte_parsing__WEBPACK_IMPORTED_MODULE_2__[/* be4toi */ "c"])(traf, pos);
-      pos += 4;
-    } else {
-      duration += defaultDuration;
+        span.appendChild(_spanChild4);
+      }
     }
 
-    if (hasSampleSize !== 0) {
-      pos += 4;
-    }
+    return span;
+  };
 
   return _loop(secureDiv);
 }
@@ -25425,12 +24999,24 @@ function isNodeFontWithColorProp(node) {
 /* harmony import */ var _get_cue_blocks__WEBPACK_IMPORTED_MODULE_0__ = __webpack_require__(2061);
 /* harmony import */ var _parse_cue__WEBPACK_IMPORTED_MODULE_1__ = __webpack_require__(788);
 /**
- * Get various information from a movie header box. Found in init segments.
- * null if not found or not parsed.
+ * Copyright 2015 CANAL+ Group
  *
- * This timescale is the default timescale used for segments.
- * @param {Uint8Array} buffer
- * @returns {Number}
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+/**
+ * /!\ This file is feature-switchable.
+ * It always should be imported through the `features` object.
  */
 // srt to VTTCue parser, Done for fun.
 // Heavily inspired from the WebVTT implementation
@@ -25661,7 +25247,6 @@ function getParentElementsByTagName(element, tagName) {
 
     return elements;
   }
-  /* tslint:enable no-unsafe-any */
 
   return constructArray(element.parentNode);
 }
@@ -25696,8 +25281,6 @@ function getParentElementsByTagName(element, tagName) {
  * limitations under the License.
  */
 
-// EXTERNAL MODULE: ./src/utils/promise.ts
-var promise = __webpack_require__(22);
 
 
 
@@ -26701,9 +26284,6 @@ function applyTextStyle(element, style, shouldTrimWhiteSpace) {
     }
   } // applies to span
 
-  var createCustomMediaKeys = function createCustomMediaKeys(keyType) {
-    return new webkit_media_keys_WebKitCustomMediaKeys(keyType);
-  };
 
   var textDecoration = style.textDecoration;
 
@@ -26828,8 +26408,6 @@ function applyTextStyle(element, style, shouldTrimWhiteSpace) {
  * @param {Object} style - The general style object of the paragraph.
  */
 
-  custom_media_keys_requestMediaKeySystemAccess = function requestMediaKeySystemAccess(keyType, keySystemConfigurations) {
-    // TODO Why TS Do not understand that isTypeSupported exists here?
 
 function applyGeneralStyle(element, style) {
   // Set default text color. It can be overrided by text element color.
@@ -26887,10 +26465,6 @@ function applyGeneralStyle(element, style) {
     }
   } // applies to region
 
-/**
- * /!\ This file is feature-switchable.
- * It always should be imported through the `features` object.
- */
 
   var opacity = style.opacity;
 
@@ -26928,8 +26502,6 @@ function applyPStyle(element, style) {
     element.style.backgroundColor = ttmlColorToCSSColor(paragraphBackgroundColor);
   } // applies to p
 
-  var index = 0;
-  var previousImageInfo = null;
 
   var lineHeight = style.lineHeight;
 
@@ -27188,6 +26760,8 @@ function parseCue(parsedCue) {
  * limitations under the License.
  */
 
+
+
 /**
  * Create array of objects which should represent the given TTML text track.
  * These objects have the following structure
@@ -27242,25 +26816,7 @@ function parseTTMLToDiv(str, timeOffset) {
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-// __VERY__ simple SAMI parser, based on ugly-but-working REGEXP:
-//   - the text, start and end times are correctly parsed.
-//   - only text for the given language is parsed.
-//   - only the CSS style associated to the P element is set.
-//   - we should be safe for any XSS.
-// The language indicated to the parser should be present in the CSS and the
-// corresponding Class should be on the P elements. If we fail to find the
-// language in a "lang" property of a CSS class, the parser will throw.
 
-/**
- * /!\ This file is feature-switchable.
- * It always should be imported through the `features` object.
- */
-
-var HTML_ENTITIES = /&#([0-9]+);/g;
-var BR = /<br>/gi;
-var STYLE = /<style[^>]*>([\s\S]*?)<\/style[^>]*>/i;
-var PARAG = /\s*<p (?:class=([^>]+))?>(.*)/i;
-var START = /<sync[^>]+?start="?([0-9]*)"?[^0-9]/i;
 /**
  * /!\ This file is feature-switchable.
  * It always should be imported through the `features` object.
@@ -27294,10 +26850,19 @@ var get_time_delimiters = __webpack_require__(6177);
 var regexps = __webpack_require__(5336);
 ;// CONCATENATED MODULE: ./src/parsers/texttracks/ttml/native/parse_cue.ts
 /**
- * Returns the rules defined for the P element.
- * Empty string if not found.
- * @param {string} str - The entire styling part.
- * @returns {string}
+ * Copyright 2015 CANAL+ Group
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
  */
 
 
@@ -27438,21 +27003,6 @@ function addStyle(cue, style) {
       // Height value is ignored.
       cue.size = Number(results[1]);
     }
-
-    var str = smi.slice(up.index, to.index);
-    var tim = str.match(START);
-
-    if (!Array.isArray(tim)) {
-      throw new Error("parse error (sync time attribute)");
-    }
-
-    var start = +tim[1];
-
-    if (isNaN(start)) {
-      throw new Error("parse error (sync time attribute NaN)");
-    }
-
-    appendToSubs(str.split("\n"), start / 1000);
   }
 
   var writingMode = style.writingMode; // let isVerticalText = true;
@@ -27560,17 +27110,19 @@ function parseTtmlToNative(str, timeOffset) {
 }
 ;// CONCATENATED MODULE: ./src/parsers/texttracks/ttml/native/index.ts
 /**
- * Take a single srt line and convert it into a span with the right style while
- * avoiding XSS.
- * What we do is set a whitelist of authorized tags, and recreate the
- * corresponding tag from scratch.
- * Supported tags:
- *   - <b>: make content bold
- *   - <i>: make content italic
- *   - <u>: draw underline on content
- *   - <font color="x">: add color x to the content
- * @param {string} text
- * @returns {HTMLElement}
+ * Copyright 2015 CANAL+ Group
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
  */
 
 /**
@@ -27617,10 +27169,6 @@ var log = __webpack_require__(3887);
  * limitations under the License.
  */
 
-        for (var line = 0; line < linifiedText.length; line++) {
-          if (line !== 0) {
-            span.appendChild(document.createElement("br"));
-          }
 
 var CELL_RESOLUTION_REGEXP = /(\d+) (\d+)/;
 /**
@@ -27787,11 +27335,6 @@ var array_includes = __webpack_require__(7714);
  * limitations under the License.
  */
 
-/**
- * /!\ This file is feature-switchable.
- * It always should be imported through the `features` object.
- */
-
 
 
 
@@ -27885,10 +27428,6 @@ function resolveStylesInheritance(styles) {
  * limitations under the License.
  */
 
-function getDirectFileInitialTime(mediaElement, startAt) {
-  if (startAt == null) {
-    return 0;
-  }
 
 
 
@@ -28156,8 +27695,19 @@ var is_non_empty_string = __webpack_require__(6923);
 var utils = __webpack_require__(360);
 ;// CONCATENATED MODULE: ./src/parsers/texttracks/webvtt/get_style_blocks.ts
 /**
- * Manage video, audio and text tracks for current direct file content.
- * @class MediaElementTrackChoiceManager
+ * Copyright 2015 CANAL+ Group
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
  */
 
 
@@ -28241,15 +27791,6 @@ function createDefaultStyleElements() {
  * limitations under the License.
  */
 
-    return chosenPrivateAudioTrack;
-  }
-  /**
-   * Returns the currently active text track.
-   * Returns `null` if no text track is active.
-   * Returns `undefined` if we cannot know which text track is active.
-   * @returns {Object|null|undefined}
-   */
-  ;
 
 /**
  * Parse style element from WebVTT.
@@ -28824,8 +28365,6 @@ var is_non_empty_string = __webpack_require__(6923);
  * limitations under the License.
  */
 
-      this._nativeTextTracks.onremovetrack = function () {
-        var _a, _b;
 
 /**
  * Add the corresponding settings on the given cue.
@@ -28903,9 +28442,19 @@ function setSettingsOnCue(settings, cue) {
 var make_vtt_cue = __webpack_require__(7253);
 ;// CONCATENATED MODULE: ./src/parsers/texttracks/webvtt/native/to_native_cue.ts
 /**
- * Disable all video track elements in the given array from showing.
- * Note that browser need to support that use case, which they often do not.
- * @param {Array.<Object>} videoTracks
+ * Copyright 2015 CANAL+ Group
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
  */
 
 /**
@@ -28943,19 +28492,8 @@ function toNativeCue(cueObj) {
  */
 
 
-/*
- * Format an unknown error into an API-defined error.
- * @param {*} error
- * @returns {Error}
- */
 
-function formatError(error, _ref) {
-  var defaultCode = _ref.defaultCode,
-      defaultReason = _ref.defaultReason;
 
-  if (Object(is_known_error["a" /* default */])(error)) {
-    return error;
-  }
 
  // Simple VTT to ICompatVTTCue parser:
 // Just parse cues and associated settings.
@@ -29158,20 +28696,6 @@ function parseTimeAndSettings(timeString) {
  * @param {Number} timeOffset
  * @returns {Object}
  */
-var EWMA = /*#__PURE__*/function () {
-  /**
-   * @param {number} halfLife
-   */
-  function EWMA(halfLife) {
-    // (half-life = log(1/2) / log(Decay Factor)
-    this._alpha = Math.exp(Math.log(0.5) / halfLife);
-    this._lastEstimate = 0;
-    this._totalWeight = 0;
-  }
-  /**
-   * @param {number} weight
-   * @param {number} value
-   */
 
 
 function parseCueBlock(cueLines, timeOffset) {
@@ -29603,7 +29127,6 @@ function generateManifestParser(options) {
           url: url
         };
       }
-    }();
 
       var value = parserResponse.value;
       var externalResources = value.urls.map(function (resourceUrl) {
@@ -29751,15 +29274,6 @@ var is_null_or_undefined = __webpack_require__(1946);
  */
 
 
-function mayBeFromCache(contentType, downloadDuration) {
-  var cacheLoadDurationThreshold = CACHE_LOAD_DURATION_THRESHOLDS[contentType];
-  return downloadDuration < cacheLoadDurationThreshold;
-}
-/**
- * Returns a function used to determine if a segment was loaded
- * from cache or not.
- * @returns {function}
- */
 
 
 var DEFAULT_REQUEST_TIMEOUT = config/* default.DEFAULT_REQUEST_TIMEOUT */.Z.DEFAULT_REQUEST_TIMEOUT;
@@ -30002,14 +29516,6 @@ var check_isobmff_integrity = __webpack_require__(4460);
  */
 
 
-/**
- * Filter representations based on their width:
- *   - the highest width considered will be the one linked to the first
- *     representation which has a superior width to the one given.
- * @param {Array.<Object>} representations - The representations array
- * @param {Number} width
- * @returns {Array.<Object>}
- */
 
 /**
  * Add multiple checks on the response given by the `segmentLoader` in argument.
@@ -30081,27 +29587,23 @@ function addSegmentIntegrityChecks(segmentLoader) {
 var byte_parsing = __webpack_require__(6968);
 ;// CONCATENATED MODULE: ./src/transports/dash/init_segment_loader.ts
 /**
- * Check if the request for the most needed segment is too slow.
- * If that's the case, re-calculate the bandwidth urgently based on
- * this single request.
- * @param {Object} pendingRequests - Current pending requests.
- * @param {Object} clock - Information on the current playback.
- * @param {Number} lastEstimatedBitrate - Last bitrate estimation emitted.
- * @returns {Number|undefined}
+ * Copyright 2015 CANAL+ Group
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
  */
 
 
-function estimateStarvationModeBitrate(pendingRequests, clock, currentRepresentation, lastEstimatedBitrate) {
-  var nextNeededPosition = clock.currentTime + clock.bufferGap;
-  var concernedRequest = getConcernedRequest(pendingRequests, nextNeededPosition);
 
-  if (concernedRequest === undefined) {
-    return undefined;
-  }
-
-  var chunkDuration = concernedRequest.duration;
-  var now = performance.now();
-  var lastProgressEvent = concernedRequest.progress.length > 0 ? concernedRequest.progress[concernedRequest.progress.length - 1] : null; // first, try to do a quick estimate from progress events
 
 /**
  * Perform a request for an initialization segment, agnostic to the container.
@@ -30359,24 +29861,23 @@ function lowLatencySegmentLoader(url, content, callbacks, cancelSignal) {
 }
 ;// CONCATENATED MODULE: ./src/transports/dash/segment_loader.ts
 /**
- * Store information about pending requests, like information about:
- *   - for which segments they are
- *   - how the request's progress goes
- * @class PendingRequestsStore
+ * Copyright 2015 CANAL+ Group
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
  */
 
-var pending_requests_store_PendingRequestsStore = /*#__PURE__*/function () {
-  function PendingRequestsStore() {
-    this._currentRequests = {};
-  }
-  /**
-   * Add information about a new pending request.
-   * @param {string} id
-   * @param {Object} payload
-   */
 
 
-  var _proto = PendingRequestsStore.prototype;
 
 
 
@@ -30642,13 +30143,6 @@ function findNextElement(elementID, parents, buffer, _ref) {
 
     currentOffset = valueEndOffset;
   }
-  /**
-   * Get score estimate for the given Representation.
-   * undefined if no estimate is available.
-   * @param {Representation} representation
-   * @returns {number|undefined}
-   */
-  ;
 
   return null;
 }
@@ -30895,11 +30389,6 @@ var base = __webpack_require__(7403);
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-
-
-
-
-
 
 /**
  * Get precize start and duration of a chunk.
@@ -42155,6 +41644,7 @@ var reportUnhandledError = __webpack_require__(5);
 
 
 
+
 function from(input, scheduler) {
     return scheduler ? scheduled(input, scheduler) : innerFrom(input);
 }
@@ -51414,19 +50904,6 @@ function shouldReloadSegmentGCedAtTheStart(segmentEntries, currentBufferedStart)
  * @returns {boolean}
  */
 
-/**
- * @param {string} url
- * @param {string|number} bitrate
- * @returns {string}
- */
-function replaceRepresentationSmoothTokens(url, bitrate, customAttributes) {
-  return url.replace(/\{bitrate\}/g, String(bitrate)).replace(/{CustomAttributes}/g, customAttributes.length > 0 ? customAttributes[0] : "");
-}
-/**
- * @param {string} url
- * @param {number} time
- * @returns {string}
- */
 
 function shouldReloadSegmentGCedAtTheEnd(segmentEntries, currentBufferedEnd) {
   if (segmentEntries.length < 2) {
@@ -51501,10 +50978,19 @@ function getSegmentPriority(timeWanted, clockTick) {
 }
 ;// CONCATENATED MODULE: ./src/core/stream/representation/get_buffer_status.ts
 /**
- * Calculate the number of times a segment repeat based on the next segment.
- * @param {Object} segment
- * @param {Object} nextSegment
- * @returns {Number}
+ * Copyright 2015 CANAL+ Group
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
  */
 
 
@@ -51798,8 +51284,6 @@ function selectGCedRanges(position, buffered, gcGap) {
  */
 
 
-  _proto._addSegments = function _addSegments(nextSegments, currentSegment) {
-    this._refreshTimeline();
 
 
 /**
@@ -51915,9 +51399,6 @@ var APPEND_WINDOW_SECURITIES = config/* default.APPEND_WINDOW_SECURITIES */.Z.AP
  * @param {Object} args
  * @returns {Observable}
  */
-function reduceChildren(root, fn, init) {
-  var node = root.firstElementChild;
-  var accumulator = init;
 
 function pushMediaSegment(_ref) {
   var clock$ = _ref.clock$,
@@ -52009,89 +51490,6 @@ function pushMediaSegment(_ref) {
 
 
 
-function createSmoothStreamingParser(parserOptions) {
-  if (parserOptions === void 0) {
-    parserOptions = {};
-  }
-
-  var referenceDateTime = parserOptions.referenceDateTime === undefined ? Date.UTC(1970, 0, 1, 0, 0, 0, 0) / 1000 : parserOptions.referenceDateTime;
-  var minRepresentationBitrate = parserOptions.minRepresentationBitrate === undefined ? 0 : parserOptions.minRepresentationBitrate;
-  var _parserOptions = parserOptions,
-      serverSyncInfos = _parserOptions.serverSyncInfos;
-  var serverTimeOffset = serverSyncInfos !== undefined ? serverSyncInfos.serverTimestamp - serverSyncInfos.clientTime : undefined;
-  /**
-   * @param {Element} q
-   * @param {string} streamType
-   * @return {Object}
-   */
-
-  function parseQualityLevel(q, streamType) {
-    var customAttributes = reduceChildren(q, function (acc, qName, qNode) {
-      if (qName === "CustomAttributes") {
-        acc.push.apply(acc, reduceChildren(qNode, function (cAttrs, cName, cNode) {
-          if (cName === "Attribute") {
-            var name = cNode.getAttribute("Name");
-            var value = cNode.getAttribute("Value");
-
-            if (name !== null && value !== null) {
-              cAttrs.push(name + "=" + value);
-            }
-          }
-
-          return cAttrs;
-        }, []));
-      }
-
-      return acc;
-    }, []);
-    /**
-     * @param {string} name
-     * @returns {string|undefined}
-     */
-
-    function getAttribute(name) {
-      var attr = q.getAttribute(name);
-      return attr == null ? undefined : attr;
-    }
-
-    switch (streamType) {
-      case "audio":
-        {
-          var audiotag = getAttribute("AudioTag");
-          var bitsPerSample = getAttribute("BitsPerSample");
-          var channels = getAttribute("Channels");
-          var codecPrivateData = getAttribute("CodecPrivateData");
-          var fourCC = getAttribute("FourCC");
-          var packetSize = getAttribute("PacketSize");
-          var samplingRate = getAttribute("SamplingRate");
-          var bitrateAttr = getAttribute("Bitrate");
-          var bitrate = bitrateAttr === undefined ? 0 : isNaN(parseInt(bitrateAttr, 10)) ? 0 : parseInt(bitrateAttr, 10);
-
-          if (fourCC !== undefined && MIME_TYPES[fourCC] === undefined || codecPrivateData === undefined) {
-            log["a" /* default */].warn("Smooth parser: Unsupported audio codec. Ignoring quality level.");
-            return null;
-          }
-
-          var codecs = getAudioCodecs(codecPrivateData, fourCC);
-          return {
-            audiotag: audiotag !== undefined ? parseInt(audiotag, 10) : audiotag,
-            bitrate: bitrate,
-            bitsPerSample: bitsPerSample !== undefined ? parseInt(bitsPerSample, 10) : bitsPerSample,
-            channels: channels !== undefined ? parseInt(channels, 10) : channels,
-            codecPrivateData: codecPrivateData,
-            codecs: codecs,
-            customAttributes: customAttributes,
-            mimeType: fourCC !== undefined ? MIME_TYPES[fourCC] : fourCC,
-            packetSize: packetSize !== undefined ? parseInt(packetSize, 10) : packetSize,
-            samplingRate: samplingRate !== undefined ? parseInt(samplingRate, 10) : samplingRate
-          };
-        }
-
-      case "video":
-        {
-          var _codecPrivateData = getAttribute("CodecPrivateData");
-
-          var _fourCC = getAttribute("FourCC");
 
 
 
@@ -52235,6 +51633,7 @@ function RepresentationStream(_ref) {
         lastSegmentQueue$.complete();
         return (0,of.of)(stream_events_generators/* default.streamTerminating */.Z.streamTerminating());
       }
+    }
 
     var bufferStatusEvt = (0,of.of)({
       type: "stream-status",
@@ -53344,8 +52743,19 @@ function getFirstDeclaredMimeType(adaptation) {
 var scan = __webpack_require__(3074);
 ;// CONCATENATED MODULE: ./src/core/stream/orchestrator/active_period_emitter.ts
 /**
- * Defines the url for the request, load the right loader (custom/default
- * one).
+ * Copyright 2015 CANAL+ Group
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
  */
 
 
@@ -53644,96 +53054,10 @@ function getBlacklistedRanges(segmentBuffer, contents) {
 
 
 
-function addNextSegments(adaptation, nextSegments, dlSegment) {
-  log["a" /* default */].debug("Smooth Parser: update segments information.");
-  var representations = adaptation.representations;
 
 
-/* harmony default export */ var pipelines = (function (options) {
-  var smoothManifestParser = smooth(options);
-  var segmentLoader = segment_loader(options.segmentLoader);
-  var manifestLoaderOptions = {
-    customManifestLoader: options.manifestLoader
-  };
-  var manifestLoader = Object(text_manifest_loader["a" /* default */])(manifestLoaderOptions);
-  var manifestPipeline = {
-    resolver: function resolver(_ref) {
-      var url = _ref.url;
-
-      if (url === undefined) {
-        return Object(of["a" /* of */])({
-          url: undefined
-        });
-      } // TODO Remove WSX logic
 
 
-      var resolving;
-
-      if (WSX_REG.test(url)) {
-        Object(warn_once["a" /* default */])("Giving WSX URL to loadVideo is deprecated." + " You should only give Manifest URLs.");
-        resolving = Object(request["a" /* default */])({
-          url: replaceToken(url, ""),
-          responseType: "document"
-        }).pipe(Object(map["a" /* map */])(function (_ref2) {
-          var value = _ref2.value;
-          var extractedURL = extractISML(value.responseData);
-
-          if (extractedURL === null || extractedURL.length === 0) {
-            throw new Error("Invalid ISML");
-          }
-
-          return extractedURL;
-        }));
-      } else {
-        resolving = Object(of["a" /* of */])(url);
-      }
-
-      var token = extractToken(url);
-      return resolving.pipe(Object(map["a" /* map */])(function (_url) {
-        return {
-          url: replaceToken(resolveManifest(_url), token)
-        };
-      }));
-    },
-    loader: manifestLoader,
-    parser: function parser(_ref3) {
-      var response = _ref3.response,
-          reqURL = _ref3.url;
-      var url = response.url === undefined ? reqURL : response.url;
-      var data = typeof response.responseData === "string" ? new DOMParser().parseFromString(response.responseData, "text/xml") : response.responseData; // TODO find a way to check if Document?
-
-      var manifestReceivedTime = response.receivedTime;
-      var parserResult = smoothManifestParser(data, url, manifestReceivedTime);
-      var manifest = new src_manifest["a" /* default */](parserResult, {
-        representationFilter: options.representationFilter,
-        supplementaryImageTracks: options.supplementaryImageTracks,
-        supplementaryTextTracks: options.supplementaryTextTracks
-      });
-      return Object(of["a" /* of */])({
-        manifest: manifest,
-        url: url
-      });
-    }
-  };
-  var segmentPipeline = {
-    loader: function loader(content) {
-      if (content.segment.isInit || options.checkMediaSegmentIntegrity !== true) {
-        return segmentLoader(content);
-      }
-
-
-      if (data === null) {
-        if (segment.isInit) {
-          var segmentProtections = representation.getProtectionsInitializationData();
-          return Object(of["a" /* of */])({
-            type: "parsed-init-segment",
-            value: {
-              initializationData: null,
-              segmentProtections: segmentProtections,
-              initTimescale: undefined
-            }
-          });
-        }
 
 
 var MAXIMUM_MAX_BUFFER_AHEAD = config/* default.MAXIMUM_MAX_BUFFER_AHEAD */.Z.MAXIMUM_MAX_BUFFER_AHEAD,
@@ -53898,17 +53222,6 @@ function StreamOrchestrator(content, clock$, abrManager, segmentBuffersStore, se
      * @returns {boolean}
      */
 
-      if (data === null) {
-        return Object(of["a" /* of */])({
-          type: "parsed-segment",
-          value: {
-            chunkData: null,
-            chunkInfos: null,
-            chunkOffset: 0,
-            appendWindow: [undefined, undefined]
-          }
-        });
-      }
 
     function isOutOfPeriodList(time) {
       var head = periodList.head();
@@ -54080,17 +53393,6 @@ function StreamOrchestrator(content, clock$, abrManager, segmentBuffersStore, se
             return (0,concat/* concat */.z)((0,of.of)(evt), (0,of.of)(stream_events_generators/* default.streamComplete */.Z.streamComplete(bufferType)));
           } // current Stream is full, create the next one if not
 
-      return Object(request["a" /* default */])({
-        url: url,
-        responseType: "arraybuffer",
-        sendProgressEvents: true
-      });
-    },
-    parser: function parser(_ref8) {
-      var response = _ref8.response,
-          content = _ref8.content;
-      var data = response.data,
-          isChunked = response.isChunked;
 
           createNextPeriodStream$.next(nextPeriod);
         } else {
@@ -54162,10 +53464,6 @@ function StreamOrchestrator(content, clock$, abrManager, segmentBuffersStore, se
  * limitations under the License.
  */
 
-/**
- * /!\ This file is feature-switchable.
- * It always should be imported through the `features` object.
- */
 
 /**
  * Create clock Observable for the `Stream` part of the code.
@@ -54229,14 +53527,8 @@ function createStreamClock(initClock$, _ref) {
  * limitations under the License.
  */
 
-// EXTERNAL MODULE: ./src/utils/is_non_empty_string.ts
-var is_non_empty_string = __webpack_require__(2);
 
-// EXTERNAL MODULE: ./src/utils/object_assign.ts
-var object_assign = __webpack_require__(9);
 
-// EXTERNAL MODULE: ./src/parsers/texttracks/ttml/get_parameters.ts
-var get_parameters = __webpack_require__(123);
 
 
 /** Number of seconds in a regular year. */
@@ -54358,8 +53650,6 @@ function whenSourceBuffersEndedUpdates$(sourceBuffers) {
  * @returns {Object}
  */
 
-// EXTERNAL MODULE: ./src/log.ts + 1 modules
-var log = __webpack_require__(0);
 
 function isMediaSourceOpened$(mediaSource) {
   return (0,merge/* merge */.T)((0,event_listeners/* onSourceOpen$ */.ym)(mediaSource).pipe((0,mapTo/* mapTo */.h)(true)), (0,event_listeners/* onSourceEnded$ */.ep)(mediaSource).pipe((0,mapTo/* mapTo */.h)(false)), (0,event_listeners/* onSourceClose$ */.UG)(mediaSource).pipe((0,mapTo/* mapTo */.h)(false))).pipe((0,startWith/* startWith */.O)(mediaSource.readyState === "open"), (0,distinctUntilChanged/* distinctUntilChanged */.x)());
@@ -55595,28 +54885,38 @@ function InitializeOnMediaSource(_ref) {
 }
 ;// CONCATENATED MODULE: ./src/core/init/index.ts
 /**
- * Creates span of text for the given #text element, with the right style.
+ * Copyright 2015 CANAL+ Group
  *
- * TODO create text elements as string? Might help performances.
- * @param {Element} el - the #text element, which text content should be
- * displayed
- * @param {Object} style - the style object for the given text
- * @param {Boolean} shouldTrimWhiteSpace - True if the space should be
- * trimmed.
- * @returns {HTMLElement}
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
  */
 
 
 /* harmony default export */ var init = (InitializeOnMediaSource);
 ;// CONCATENATED MODULE: ./src/core/api/clock.ts
 /**
- * @param {Element} paragraph
- * @param {Element} body
- * @param {Array.<Object>} regions
- * @param {Array.<Object>} styles
- * @param {Object} paragraphStyle
- * @param {Boolean} shouldTrimWhiteSpaceOnParagraph
- * @returns {HTMLElement}
+ * Copyright 2015 CANAL+ Group
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
  */
 
 /**
@@ -55832,9 +55132,6 @@ function getRebufferingStatus(prevTimings, currentTimings, _ref) {
  * @returns {Object|null}
  */
 
-function parseTTMLStringToDIV(str, timeOffset) {
-  var ret = [];
-  var xml = new DOMParser().parseFromString(str, "text/xml");
 
 function getFreezingStatus(prevTimings, currentTimings) {
   if (prevTimings.freezing) {
@@ -56653,17 +55950,6 @@ function normalizeAudioTracks(tracks) {
  * @returns {Array.<Object|null>}
  */
 
-  if (segment.isInit) {
-    var mdhdTimescale = Object(utils["b" /* getMDHDTimescale */])(chunkBytes);
-    return Object(of["a" /* of */])({
-      type: "parsed-init-segment",
-      value: {
-        initializationData: null,
-        initTimescale: mdhdTimescale > 0 ? mdhdTimescale : undefined,
-        segmentProtections: []
-      }
-    });
-  }
 
 function normalizeTextTracks(tracks) {
   return tracks.map(function (t) {

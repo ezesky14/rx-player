@@ -112,8 +112,8 @@ describe("Features - initializeFeaturesObject", () => {
       emeManager: require("../../core/eme/index").default,
       directfile: {
         initDirectFile: require("../../core/init/initialize_directfile").default,
-        mediaElementTrackChoiceManager:
-          require("../../core/api/media_element_track_choice_manager").default,
+        mediaElementTracksStore:
+          require("../../core/api/track_management/media_element_tracks_store").default,
       },
       nativeTextTracksBuffer: require("../../core/segment_buffers/implementations/text/native/index")
         .default,

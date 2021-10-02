@@ -16,13 +16,14 @@
 
 import { Subject } from "rxjs";
 import { ICustomError } from "../../errors";
-import {
+import Manifest, {
   Adaptation,
   ISegment,
   Period,
   Representation,
 } from "../../manifest";
 import { IEMSG } from "../../parsers/containers/isobmff";
+import { IReadOnlySharedReference } from "../../utils/reference";
 import { IContentProtection } from "../eme";
 import { IBufferType } from "../segment_buffers";
 
@@ -89,7 +90,7 @@ export interface IStreamStatusEvent {
      * The presence or absence of a discontinuity can evolve during playback
      * (because new tracks or qualities might not have the same ones).
      * As such, it is advised to only consider the last discontinuity sent
-     * through a `"stream-status"` event.
+     * through a `IStreamStatusEvent` event.
      */
     imminentDiscontinuity : IBufferDiscontinuity | null;
     /**
@@ -167,8 +168,14 @@ export interface IInbandEvent {
   value: IEMSG;
 }
 
-export interface IInbandEventsEvent { type : "inband-events";
-                                      value : IInbandEvent[]; }
+/**
+ * "Inband" (inside the media or initialization segment) event(s) have been
+ * encountered.
+ */
+export interface IInbandEventsEvent {
+  type : "inband-events";
+  value : IInbandEvent[];
+}
 
 /**
  * Event sent when a `RepresentationStream` is terminating:
@@ -259,6 +266,8 @@ export interface IPeriodStreamReadyEvent {
   value : {
     /** The type of buffer linked to the `PeriodStream` we want to create. */
     type : IBufferType;
+    /** The `Manifest` linked to the `PeriodStream` we have created. */
+    manifest : Manifest;
     /** The `Period` linked to the `PeriodStream` we have created. */
     period : Period;
     /**
@@ -268,11 +277,115 @@ export interface IPeriodStreamReadyEvent {
      * The `PeriodStream` will not do anything until this subject has emitted
      * at least one to give its initial choice.
      * You can send `null` through it to tell this `PeriodStream` that you don't
-     * want any `Adaptation`.
+     * want any `Adaptation` for now.
      */
-    adaptation$ : Subject<Adaptation|null>;
+    adaptation$ : Subject<IAdaptationChoice | null>;
   };
 }
+
+/** Object indicating a choice of Adaptation made by the user. */
+export interface IAdaptationChoice {
+  /** The Adaptation choosen. */
+  adaptation : Adaptation;
+
+  /** "Switching mode" in which the track switch should happen. */
+  switchingMode : ITrackSwitchingMode;
+
+  /**
+   * Shared reference allowing to indicate which Representations from
+   * that Adaptation are allowed.
+   */
+  representations : IReadOnlySharedReference<IRepresentationsChoice>;
+}
+
+/** Object indicating a choice of allowed Representations made by the user. */
+export interface IRepresentationsChoice {
+  /** `Representation`s wanted by the user. */
+  representations : Representation[];
+  /**
+   * How the Streams should react if another, not currently authorized,
+   * Representation was previously playing.
+   */
+  switchingMode : IRepresentationsSwitchingMode;
+}
+
+/**
+ * Behavior wanted when replacing a track / Adaptation by another:
+ *
+ *   - direct: Switch Adaptation immediately by removing all the previous
+ *     track's data.
+ *     This might interrupt playback while data for any of the new
+ *     track wanted is loaded.
+ *
+ *     If talking about video track, the previous video frame at the time of the
+ *     switch will probably still be on display while this is happening.
+ *     If this is not something you want, you might prefer the "reload" mode.
+ *
+ *   - seamless: Switch Adaptation without interrupting playback by still
+ *     keeping data from the previous track around the current
+ *     position.
+ *     This could have the disadvantage of still playing the previous
+ *     track during a short time (not more than a few seconds in
+ *     most cases).
+ *
+ *   - reload: Reload `MediaSource` to provide an immediate interruption of the
+ *     previous interruption before switching to the new Adaptation.
+ *
+ *     This can be seen like the "direct" mode with two differences:
+ *
+ *       - in case of video contents, the "direct" mode might rebuffer for a
+ *       time with the previous frame displaying. With "reload" a black screen
+ *       will probably be shown instead.
+ *
+ *       - some targets might not handle "direct" mode properly. The "reload"
+ *       mode is kind of a more compatible attempt of immediately switching the
+ *       Adaptation.
+ */
+export type ITrackSwitchingMode = "direct" |
+                                  "seamless" |
+                                  "reload";
+
+/**
+ * Behavior wanted when replacing active Representations by others:
+ *
+ *   - direct: Switch Representation immediately by removing all the previous
+ *     Representations's data.
+ *     This might interrupt playback while data for any of the new
+ *     Representations wanted is loaded.
+ *
+ *     If talking about video Representations, the previous video frame at the
+ *     time of the switch will probably still be on display while this is
+ *     happening.
+ *     If this is not something you want, you might prefer the "reload" mode.
+ *
+ *   - seamless: Switch Representation without interrupting playback by still
+ *     keeping data from the previous Representations around the current
+ *     position.
+ *     This could have the disadvantage of still playing the previous
+ *     Representations during a short time (not more than a few seconds in
+ *     most cases).
+ *
+ *   - reload: Reload `MediaSource` to provide an immediate interruption of the
+ *     previous interruption before switching to the new Representation.
+ *
+ *     This can be seen like the "direct" mode with two differences:
+ *
+ *       - in case of video contents, the "direct" mode might rebuffer for a
+ *       time with the previous frame displaying. With "reload" a black screen
+ *       will probably be shown instead.
+ *
+ *       - some targets might not handle "direct" mode properly. The "reload"
+ *       mode is kind of a more compatible attempt of immediately switching the
+ *       Representation.
+ *
+ *   - lazy: Keep data from the previous Representation in the buffer.
+ *     It still might eventually be replaced by Representation of a better
+ *     quality when depending on future playback condition.
+ */
+export type IRepresentationsSwitchingMode = "direct" |
+                                            "seamless" |
+                                            "reload" |
+                                            "lazy";
 
 /**
  * A `PeriodStream` has been removed.
@@ -290,6 +403,7 @@ export interface IPeriodStreamClearedEvent {
      * about which `PeriodStream` has been removed.
      */
     type : IBufferType;
+    manifest : Manifest;
     /**
      * The `Period` linked to the `PeriodStream` we just removed.
      *
@@ -465,7 +579,6 @@ export type IAdaptationStreamEvent = IBitrateEstimationChangeEvent |
                                      // From a RepresentationStream
 
                                      IStreamStatusEvent |
-                                     IStreamEventAddedSegment<unknown> |
                                      IEncryptionDataEncounteredEvent |
                                      IStreamManifestMightBeOutOfSync |
                                      IStreamNeedsManifestRefresh |
@@ -488,7 +601,6 @@ export type IPeriodStreamEvent = IPeriodStreamReadyEvent |
                                  // From a RepresentationStream
 
                                  IStreamStatusEvent |
-                                 IStreamEventAddedSegment<unknown> |
                                  IEncryptionDataEncounteredEvent |
                                  IStreamManifestMightBeOutOfSync |
                                  IStreamNeedsManifestRefresh |
@@ -516,7 +628,6 @@ export type IMultiplePeriodStreamsEvent = IPeriodStreamClearedEvent |
                                           // From a RepresentationStream
 
                                           IStreamStatusEvent |
-                                          IStreamEventAddedSegment<unknown> |
                                           IEncryptionDataEncounteredEvent |
                                           IStreamManifestMightBeOutOfSync |
                                           IStreamNeedsManifestRefresh |
@@ -548,7 +659,6 @@ export type IStreamOrchestratorEvent = IActivePeriodChangedEvent |
                                        // From a RepresentationStream
 
                                        IStreamStatusEvent |
-                                       IStreamEventAddedSegment<unknown> |
                                        IEncryptionDataEncounteredEvent |
                                        IStreamManifestMightBeOutOfSync |
                                        IStreamNeedsManifestRefresh |

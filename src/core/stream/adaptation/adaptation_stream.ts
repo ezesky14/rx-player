@@ -32,12 +32,15 @@ import {
   EMPTY,
   exhaustMap,
   filter,
+  ignoreElements,
   map,
   merge as observableMerge,
   mergeMap,
   Observable,
   of as observableOf,
-  share,
+  shareReplay,
+  Subject,
+  switchMap,
   take,
   tap,
 } from "rxjs";
@@ -49,7 +52,6 @@ import Manifest, {
   Period,
   Representation,
 } from "../../../manifest";
-import deferSubscriptions from "../../../utils/defer_subscriptions";
 import {
   createSharedReference,
   IReadOnlySharedReference,
@@ -60,6 +62,7 @@ import ABRManager, {
   IABRRequestBeginEventValue,
   IABRRequestEndEventValue,
   IABRRequestProgressEventValue,
+  IABRStreamEvents,
 } from "../../abr";
 import { IReadOnlyPlaybackObserver } from "../../api";
 import { SegmentFetcherCreator } from "../../fetchers";
@@ -72,9 +75,10 @@ import RepresentationStream, {
 } from "../representation";
 import {
   IAdaptationStreamEvent,
+  IRepresentationsChoice,
   IRepresentationStreamEvent,
 } from "../types";
-import createRepresentationEstimator from "./create_representation_estimator";
+import getRepresentationsSwitchingStrategy from "./get_representations_switch_strategy";
 
 const { DELTA_POSITION_AFTER_RELOAD } = config;
 
@@ -109,9 +113,12 @@ export interface IAdaptationStreamArguments {
   /** Regularly emit playback conditions. */
   playbackObserver : IReadOnlyPlaybackObserver<IAdaptationStreamPlaybackObservation>;
   /** Content you want to create this Stream for. */
-  content : { manifest : Manifest;
-              period : Period;
-              adaptation : Adaptation; };
+  content : {
+    manifest : Manifest;
+    period : Period;
+    adaptation : Adaptation;
+    representations : IReadOnlySharedReference<IRepresentationsChoice>;
+  };
   options: IAdaptationStreamOptions;
   /** SourceBuffer wrapper - needed to push media segments. */
   segmentBuffer : SegmentBuffer;
@@ -190,7 +197,6 @@ export default function AdaptationStream({
   segmentFetcherCreator,
   wantedBufferAhead,
 } : IAdaptationStreamArguments) : Observable<IAdaptationStreamEvent> {
-  const directManualBitrateSwitching = options.manualBitrateSwitchingMode === "direct";
   const { manifest, period, adaptation } = content;
 
   /**
@@ -203,9 +209,7 @@ export default function AdaptationStream({
    */
   const bufferGoalRatioMap: Partial<Record<string, number>> = {};
 
-  const { estimator$, abrFeedbacks$ } =
-    createRepresentationEstimator(content, abrManager, playbackObserver.observe(true));
-
+  const abrFeedbacks$ = new Subject<IABRStreamEvents>();
   /** Allows the `RepresentationStream` to easily fetch media segments. */
   const segmentFetcher = segmentFetcherCreator
     .createSegmentFetcher(adaptation.type,
@@ -224,191 +228,228 @@ export default function AdaptationStream({
                             },
                           });
 
-  /**
-   * Stores the last estimate emitted through the `abrEstimate$` Observable,
-   * starting with `null`.
-   * This allows to easily rely on that value in inner Observables which might also
-   * need the last already-considered value.
-   */
-  const lastEstimate = createSharedReference<IABREstimate | null>(null);
 
-  /** Emits abr estimates on Subscription. */
-  const abrEstimate$ = estimator$.pipe(
-    tap((estimate) => { lastEstimate.setValue(estimate); }),
-    deferSubscriptions(),
-    share());
+  const representations$ = content.representations.asObservable();
+  return representations$.pipe(switchMap(representationsInfo => {
+    const { representations } = representationsInfo;
+    const estimator$ = abrManager.get$({ adaptation, representations },
+                                       playbackObserver.observe(true),
+                                       abrFeedbacks$);
+    /**
+     * Stores the last estimate emitted through the `representationEstimate$` Observable,
+     * starting with `null`.
+     * This allows to easily rely on that value in inner Observables which might also
+     * need the last already-considered value.
+     */
+    const lastRepEstimate = createSharedReference<IABREstimate | null>(null);
 
-  /** Emit at each bitrate estimate done by the ABRManager. */
-  const bitrateEstimate$ = abrEstimate$.pipe(
-    filter(({ bitrate }) => bitrate != null),
-    distinctUntilChanged((old, current) => old.bitrate === current.bitrate),
-    map(({ bitrate }) => {
-      log.debug(`Stream: new ${adaptation.type} bitrate estimate`, bitrate);
-      return EVENTS.bitrateEstimationChange(adaptation.type, bitrate);
-    })
-  );
 
-  /** Recursively create `RepresentationStream`s according to the last estimate. */
-  const representationStreams$ = abrEstimate$
-    .pipe(exhaustMap((estimate, i) : Observable<IAdaptationStreamEvent> => {
-      return recursivelyCreateRepresentationStreams(estimate, i === 0);
-    }));
+    /** Emits estimates on Subscription. */
+    const representationEstimate$ = estimator$.pipe(
+      tap((estimate) => { lastRepEstimate.setValue(estimate); }),
+      shareReplay({ refCount: true }));
 
-  return observableMerge(representationStreams$, bitrateEstimate$);
+    /** Emit at each bitrate estimate done by the ABRManager. */
+    const bitrateEstimate$ = representationEstimate$.pipe(
+      filter(({ bitrate }) => bitrate !== undefined),
+      distinctUntilChanged((prev, next) =>
+        prev.bitrate === next.bitrate),
+      map(({ bitrate }) => {
+        log.debug(`Stream: new ${adaptation.type} bitrate estimate`, bitrate);
+        return EVENTS.bitrateEstimationChange(adaptation.type, bitrate);
+      })
+    );
 
-  /**
-   * Create `RepresentationStream`s starting with the Representation indicated in
-   * `fromEstimate` argument.
-   * Each time a new estimate is made, this function will create a new
-   * `RepresentationStream` corresponding to that new estimate.
-   * @param {Object} fromEstimate - The first estimate we should start with
-   * @param {boolean} isFirstEstimate - Whether this is the first time we're
-   * creating a RepresentationStream in the corresponding `AdaptationStream`.
-   * This is important because manual quality switches might need a full reload
-   * of the MediaSource _except_ if we are talking about the first quality chosen.
-   * @returns {Observable}
-   */
-  function recursivelyCreateRepresentationStreams(
-    fromEstimate : IABREstimate,
-    isFirstEstimate : boolean
-  ) : Observable<IAdaptationStreamEvent> {
-    const { representation } = fromEstimate;
+    /**
+     * Recursively create `RepresentationStream`s according to the last
+     * Representation estimate.
+     */
+    const representationStreams$ = representationEstimate$
+      .pipe(exhaustMap((estimate) : Observable<IAdaptationStreamEvent> => {
+        return recursivelyCreateRepresentationStreams(estimate);
+      }));
 
-    // A manual bitrate switch might need an immediate feedback.
-    // To do that properly, we need to reload the MediaSource
-    if (directManualBitrateSwitching &&
-        fromEstimate.manual &&
-        !isFirstEstimate)
-    {
-      return reloadAfterSwitch(period,
-                               adaptation.type,
-                               playbackObserver,
-                               DELTA_POSITION_AFTER_RELOAD.bitrateSwitch);
+    const switchStrat = getRepresentationsSwitchingStrategy(period,
+                                                            adaptation,
+                                                            representationsInfo,
+                                                            segmentBuffer,
+                                                            playbackObserver);
+
+
+    let obs$;
+    switch (switchStrat.type) {
+      case "continue":
+        obs$ = representationStreams$;
+        break;
+
+      case "needs-reload":
+        obs$ = reloadAfterSwitch(period,
+                                 adaptation.type,
+                                 playbackObserver,
+                                 DELTA_POSITION_AFTER_RELOAD.bitrateSwitch);
+        break;
+
+      default:
+        const needsBufferFlush$ = switchStrat.type === "flush-buffer"
+          ? observableOf(EVENTS.needsBufferFlush())
+          : EMPTY;
+        const cleanBuffer$ = observableConcat(...switchStrat.value.map(({ start, end }) =>
+          segmentBuffer.removeBuffer(start, end))
+          // NOTE As of now (RxJS 7.4.0), RxJS defines `ignoreElements` default
+          // first type parameter as `any` instead of the perfectly fine `unknown`,
+          // leading to linter issues, as it forbids the usage of `any`.
+          // This is why we're disabling the eslint rule.
+          /* eslint-disable-next-line @typescript-eslint/no-unsafe-argument */
+        ).pipe(ignoreElements());
+        obs$ = observableConcat(cleanBuffer$, needsBufferFlush$, representationStreams$);
+    }
+
+    return observableMerge(obs$, bitrateEstimate$);
+
+    /**
+     * Create `RepresentationStream`s starting with the Representation indicated in
+     * `currEstimate` argument.
+     * Each time a new estimate is made, this function will create a new
+     * `RepresentationStream` corresponding to that new estimate.
+     * @param {Object} currEstimate - The first estimate we should start with
+     * @param {boolean} isFirstEstimate - Whether this is the first time we're
+     * creating a RepresentationStream in the corresponding `AdaptationStream`.
+     * This is important because manual quality switches might need a full reload
+     * of the MediaSource _except_ if we are talking about the first quality chosen.
+     * @returns {Observable}
+     */
+    function recursivelyCreateRepresentationStreams(
+      currEstimate : IABREstimate
+    ) : Observable<IAdaptationStreamEvent> {
+      const { representation } = currEstimate;
+
+
+      /**
+       * Emit when the current RepresentationStream should be terminated to make
+       * place for a new one (e.g. when switching quality).
+       */
+      const terminateCurrentStream$ = lastRepEstimate.asObservable().pipe(
+        filter((newEstimate) =>
+          newEstimate === null ||
+          newEstimate.representation.id !== representation.id ||
+          (newEstimate.manual && !currEstimate.manual)),
+        take(1),
+        map((newEstimate) => {
+          if (newEstimate === null) {
+            log.info("Stream: urgent Representation termination", adaptation.type);
+            return ({ urgent: true });
+          }
+          if (newEstimate.urgent) {
+            log.info("Stream: urgent Representation switch", adaptation.type);
+            return ({ urgent: true });
+          } else {
+            log.info("Stream: slow Representation switch", adaptation.type);
+            return ({ urgent: false });
+          }
+        }));
+
+      /**
+       * "Fast-switching" is a behavior allowing to replace low-quality segments
+       * (i.e. with a low bitrate) with higher-quality segments (higher bitrate) in
+       * the buffer.
+       * This threshold defines a bitrate from which "fast-switching" is disabled.
+       * For example with a fastSwitchThreshold set to `100`, segments with a
+       * bitrate of `90` can be replaced. But segments with a bitrate of `100`
+       * onward won't be replaced by higher quality segments.
+       * Set to `undefined` to indicate that there's no threshold (anything can be
+       * replaced by higher-quality segments).
+       */
+      const fastSwitchThreshold$ = !options.enableFastSwitching ?
+        observableOf(0) : // Do not fast-switch anything
+        lastRepEstimate.asObservable().pipe(
+          map((estimate) => estimate === null ? undefined :
+                                                estimate.knownStableBitrate),
+          distinctUntilChanged());
+
+      const representationChange$ =
+        observableOf(EVENTS.representationChange(adaptation.type,
+                                                 period,
+                                                 representation));
+
+      return observableConcat(representationChange$,
+                              createRepresentationStream(representation,
+                                                         terminateCurrentStream$,
+                                                         fastSwitchThreshold$)).pipe(
+        mergeMap((evt) => {
+          if (evt.type === "added-segment") {
+            abrFeedbacks$.next(evt);
+            return EMPTY;
+          }
+          if (evt.type === "representationChange") {
+            abrFeedbacks$.next(evt);
+          }
+          if (evt.type === "stream-terminating") {
+            const lastChoice = lastRepEstimate.getValue();
+            if (lastChoice === null) {
+              return EMPTY;
+            }
+            return recursivelyCreateRepresentationStreams(lastChoice);
+          }
+          return observableOf(evt);
+        }));
     }
 
     /**
-     * Emit when the current RepresentationStream should be terminated to make
-     * place for a new one (e.g. when switching quality).
+     * Create and returns a new RepresentationStream Observable, linked to the
+     * given Representation.
+     * @param {Representation} representation
+     * @returns {Observable}
      */
-    const terminateCurrentStream$ = lastEstimate.asObservable().pipe(
-      filter((newEstimate) => newEstimate === null ||
-                              newEstimate.representation.id !== representation.id ||
-                              (newEstimate.manual && !fromEstimate.manual)),
-      take(1),
-      map((newEstimate) => {
-        if (newEstimate === null) {
-          log.info("Stream: urgent Representation termination", adaptation.type);
-          return ({ urgent: true });
-        }
-        if (newEstimate.urgent) {
-          log.info("Stream: urgent Representation switch", adaptation.type);
-          return ({ urgent: true });
-        } else {
-          log.info("Stream: slow Representation switch", adaptation.type);
-          return ({ urgent: false });
-        }
-      }));
+    function createRepresentationStream(
+      representation : Representation,
+      terminateCurrentStream$ : Observable<ITerminationOrder>,
+      fastSwitchThreshold$ : Observable<number | undefined>
+    ) : Observable<IRepresentationStreamEvent> {
+      return observableDefer(() => {
+        const oldBufferGoalRatio = bufferGoalRatioMap[representation.id];
+        const bufferGoalRatio = oldBufferGoalRatio != null ? oldBufferGoalRatio :
+                                                             1;
+        bufferGoalRatioMap[representation.id] = bufferGoalRatio;
 
-    /**
-     * "Fast-switching" is a behavior allowing to replace low-quality segments
-     * (i.e. with a low bitrate) with higher-quality segments (higher bitrate) in
-     * the buffer.
-     * This threshold defines a bitrate from which "fast-switching" is disabled.
-     * For example with a fastSwitchThreshold set to `100`, segments with a
-     * bitrate of `90` can be replaced. But segments with a bitrate of `100`
-     * onward won't be replaced by higher quality segments.
-     * Set to `undefined` to indicate that there's no threshold (anything can be
-     * replaced by higher-quality segments).
-     */
-    const fastSwitchThreshold$ = !options.enableFastSwitching ?
-      observableOf(0) : // Do not fast-switch anything
-      lastEstimate.asObservable().pipe(
-        map((estimate) => estimate === null ? undefined :
-                                              estimate.knownStableBitrate),
-        distinctUntilChanged());
+        const bufferGoal$ = wantedBufferAhead.asObservable().pipe(
+          map((wba) => wba * bufferGoalRatio)
+        );
 
-    const representationChange$ =
-      observableOf(EVENTS.representationChange(adaptation.type,
-                                               period,
-                                               representation));
-
-    return observableConcat(representationChange$,
-                            createRepresentationStream(representation,
-                                                       terminateCurrentStream$,
-                                                       fastSwitchThreshold$)).pipe(
-      tap((evt) : void => {
-        if (evt.type === "representationChange" ||
-            evt.type === "added-segment")
-        {
-          return abrFeedbacks$.next(evt);
-        }
-      }),
-      mergeMap((evt) => {
-        if (evt.type === "stream-terminating") {
-          const estimate = lastEstimate.getValue();
-          if (estimate === null) {
-            return EMPTY;
-          }
-          return recursivelyCreateRepresentationStreams(estimate, false);
-        }
-        return observableOf(evt);
-      }));
-  }
-
-  /**
-   * Create and returns a new RepresentationStream Observable, linked to the
-   * given Representation.
-   * @param {Representation} representation
-   * @returns {Observable}
-   */
-  function createRepresentationStream(
-    representation : Representation,
-    terminateCurrentStream$ : Observable<ITerminationOrder>,
-    fastSwitchThreshold$ : Observable<number | undefined>
-  ) : Observable<IRepresentationStreamEvent> {
-    return observableDefer(() => {
-      const oldBufferGoalRatio = bufferGoalRatioMap[representation.id];
-      const bufferGoalRatio = oldBufferGoalRatio != null ? oldBufferGoalRatio :
-                                                           1;
-      bufferGoalRatioMap[representation.id] = bufferGoalRatio;
-
-      const bufferGoal$ = wantedBufferAhead.asObservable().pipe(
-        map((wba) => wba * bufferGoalRatio)
-      );
-
-      log.info("Stream: changing representation",
-               adaptation.type,
-               representation.id,
-               representation.bitrate);
-      return RepresentationStream({ playbackObserver,
-                                    content: { representation,
-                                               adaptation,
-                                               period,
-                                               manifest },
-                                    segmentBuffer,
-                                    segmentFetcher,
-                                    terminate$: terminateCurrentStream$,
-                                    options: { bufferGoal$,
-                                               drmSystemId: options.drmSystemId,
-                                               fastSwitchThreshold$ } })
-        .pipe(catchError((err : unknown) => {
-          const formattedError = formatError(err, {
-            defaultCode: "NONE",
-            defaultReason: "Unknown `RepresentationStream` error",
-          });
-          if (formattedError.code === "BUFFER_FULL_ERROR") {
-            const wba = wantedBufferAhead.getValue();
-            const lastBufferGoalRatio = bufferGoalRatio;
-            if (lastBufferGoalRatio <= 0.25 || wba * lastBufferGoalRatio <= 2) {
-              throw formattedError;
+        log.info("Stream: changing representation",
+                 adaptation.type,
+                 representation.id,
+                 representation.bitrate);
+        return RepresentationStream({ playbackObserver,
+                                      content: { representation,
+                                                 adaptation,
+                                                 period,
+                                                 manifest },
+                                      segmentBuffer,
+                                      segmentFetcher,
+                                      terminate$: terminateCurrentStream$,
+                                      options: { bufferGoal$,
+                                                 drmSystemId: options.drmSystemId,
+                                                 fastSwitchThreshold$ } })
+          .pipe(catchError((err : unknown) => {
+            const formattedError = formatError(err, {
+              defaultCode: "NONE",
+              defaultReason: "Unknown `RepresentationStream` error",
+            });
+            if (formattedError.code === "BUFFER_FULL_ERROR") {
+              const wba = wantedBufferAhead.getValue();
+              const lastBufferGoalRatio = bufferGoalRatio;
+              if (lastBufferGoalRatio <= 0.25 || wba * lastBufferGoalRatio <= 2) {
+                throw formattedError;
+              }
+              bufferGoalRatioMap[representation.id] = lastBufferGoalRatio - 0.25;
+              return createRepresentationStream(representation,
+                                                terminateCurrentStream$,
+                                                fastSwitchThreshold$);
             }
-            bufferGoalRatioMap[representation.id] = lastBufferGoalRatio - 0.25;
-            return createRepresentationStream(representation,
-                                              terminateCurrentStream$,
-                                              fastSwitchThreshold$);
-          }
-          throw formattedError;
-        }));
-    });
-  }
+            throw formattedError;
+          }));
+      });
+    }
+  }));
+
 }

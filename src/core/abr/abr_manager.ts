@@ -21,7 +21,10 @@ import {
   of as observableOf,
 } from "rxjs";
 import log from "../../log";
-import { Representation } from "../../manifest";
+import {
+  Adaptation,
+  Representation,
+} from "../../manifest";
 import objectAssign from "../../utils/object_assign";
 import { ISharedReference } from "../../utils/reference";
 import takeFirstSet from "../../utils/take_first_set";
@@ -96,18 +99,19 @@ export default class ABRManager {
    * Take type and an array of the available representations, spit out an
    * observable emitting the best representation (given the network/buffer
    * state).
-   * @param {string} type
-   * @param {Array.<Representation>} representations
+   * @param {Object} content
    * @param {Observable<Object>} observation$
    * @param {Observable<Object>} streamEvents$
    * @returns {Observable}
    */
   public get$(
-    type : IBufferType,
-    representations : Representation[],
+    content : { adaptation : Adaptation;
+                representations : Representation[]; },
     observation$ : Observable<IABRManagerPlaybackObservation>,
     streamEvents$ : Observable<IABRStreamEvents>
   ) : Observable<IABREstimate> {
+    const { adaptation, representations } = content;
+    const type = adaptation.type;
     const bandwidthEstimator = this._getBandwidthEstimator(type);
     const manualBitrate$ =
       takeFirstSet<Observable<number>>(this._manualBitrates[type]?.asObservable(),

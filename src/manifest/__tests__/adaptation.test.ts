@@ -71,7 +71,6 @@ describe("Manifest - Adaptation", () => {
     expect(adaptation.language).toBe(undefined);
     expect(adaptation.normalizedLanguage).toBe(undefined);
     expect(adaptation.manuallyAdded).toBe(false);
-    expect(adaptation.getAvailableBitrates()).toEqual([]);
     expect(adaptation.getRepresentation("")).toBe(undefined);
 
     expect(defaultRepresentationSpy).not.toHaveBeenCalled();
@@ -155,7 +154,6 @@ describe("Manifest - Adaptation", () => {
     expect(parsedRepresentations[1].id).toEqual("rep3");
     expect(parsedRepresentations[2].id).toEqual("rep2");
 
-    expect(adaptation.getAvailableBitrates()).toEqual([10, 20, 30]);
     expect(adaptation.getRepresentation("rep2").bitrate).toEqual(30);
   });
 
@@ -215,7 +213,6 @@ describe("Manifest - Adaptation", () => {
     expect(parsedRepresentations[1].id).toEqual("rep5");
     expect(parsedRepresentations[2].id).toEqual("rep6");
 
-    expect(adaptation.getAvailableBitrates()).toEqual([40, 50, 60]);
     expect(adaptation.getRepresentation("rep2")).toBe(undefined);
     expect(adaptation.getRepresentation("rep4").id).toEqual("rep4");
   });
@@ -337,40 +334,6 @@ describe("Manifest - Adaptation", () => {
     expect(adaptation2.normalizedLanguage).toBe(undefined);
     expect(adaptation2.manuallyAdded).toEqual(true);
     expect(normalizeSpy).not.toHaveBeenCalled();
-  });
-
-  /* eslint-disable max-len */
-  it("should filter Representation with duplicate bitrates in getAvailableBitrates", () => {
-  /* eslint-enable max-len */
-
-    jest.mock("../representation", () => ({ __esModule: true as const,
-                                            default: defaultRepresentationSpy }));
-    const uniqSpy = jest.fn(() => [45, 92]);
-    jest.mock("../../utils/uniq", () => ({ __esModule: true as const,
-                                           default: uniqSpy }));
-
-    const Adaptation = require("../adaptation").default;
-    const rep1 = { bitrate: 10,
-                   id: "rep1",
-                   index: minimalRepresentationIndex };
-    const rep2 = { bitrate: 20,
-                   id: "rep2",
-                   index: minimalRepresentationIndex };
-    const rep3 = { bitrate: 20,
-                   id: "rep3",
-                   index: minimalRepresentationIndex };
-    const representations = [rep1, rep2, rep3];
-    const args = { id: "12",
-                   representations,
-                   type: "text" as const };
-    const adaptation = new Adaptation(args);
-
-    const parsedRepresentations = adaptation.representations;
-    expect(parsedRepresentations.length).toBe(3);
-
-    expect(adaptation.getAvailableBitrates()).toEqual([45, 92]);
-    expect(uniqSpy).toHaveBeenCalledTimes(1);
-    expect(uniqSpy).toHaveBeenCalledWith(representations.map(r => r.bitrate));
   });
 
   /* eslint-disable max-len */

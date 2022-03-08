@@ -92,8 +92,6 @@ export interface IExposedAdaptation {
   isClosedCaption? : boolean | undefined;
   isTrickModeTrack? : boolean | undefined;
   representations : IExposedRepresentation[];
-
-  getAvailableBitrates() : number[];
 }
 
 /** Representation (represents a quality), as documented in the API documentation. */

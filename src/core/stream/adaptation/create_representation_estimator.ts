@@ -28,7 +28,7 @@ import {
   IRepresentationEstimatorPlaybackObservation,
   IRepresentationEstimator,
   IRepresentationEstimatorCallbacks,
-} from "../../abr";
+} from "../../adaptive";
 import { IReadOnlyPlaybackObserver } from "../../api";
 
 /**

@@ -26,6 +26,8 @@ import {
   Observable,
 } from "rxjs";
 import { MediaError } from "../../../errors";
+import fromCancellablePromise from "../../../utils/rx-from_cancellable_promise";
+import TaskCanceller from "../../../utils/task_canceller";
 import { IReadOnlyPlaybackObserver } from "../../api";
 import {
   IPushChunkInfos,
@@ -49,7 +51,9 @@ export default function appendSegmentToBuffer<T>(
   segmentBuffer : SegmentBuffer,
   dataInfos : IPushChunkInfos<T>
 ) : Observable<unknown> {
-  const append$ = segmentBuffer.pushChunk(dataInfos);
+  const pushCanceller = new TaskCanceller();
+  const append$ = fromCancellablePromise(pushCanceller, () =>
+    segmentBuffer.pushChunk(dataInfos, pushCanceller.signal));
 
   return append$.pipe(
     catchError((appendError : unknown) => {

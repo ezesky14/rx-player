@@ -15,14 +15,15 @@
  */
 
 import {
-  concatAll,
+  concat as observableConcat,
   defer as observableDefer,
-  from as observableFrom,
   Observable,
 } from "rxjs";
 import config from "../../../config";
 import log from "../../../log";
 import { getInnerAndOuterTimeRanges } from "../../../utils/ranges";
+import fromCancellablePromise from "../../../utils/rx-from_cancellable_promise";
+import TaskCanceller from "../../../utils/task_canceller";
 import { SegmentBuffer } from "../../segment_buffers";
 
 
@@ -53,9 +54,11 @@ export default function forceGarbageCollection(
     }
 
     log.debug("Stream: GC cleaning", cleanedupRanges);
-    return observableFrom(
-      cleanedupRanges.map(({ start, end }) => bufferingQueue.removeBuffer(start, end))
-    ).pipe(concatAll());
+    return observableConcat(cleanedupRanges.map(({ start, end }) => {
+      const canceller = new TaskCanceller();
+      return fromCancellablePromise(canceller, () =>
+        bufferingQueue.removeBuffer(start, end, canceller.signal));
+    }));
   });
 }
 

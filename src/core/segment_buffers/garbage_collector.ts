@@ -16,15 +16,16 @@
 
 import {
   combineLatest as observableCombineLatest,
-  concatAll,
-  EMPTY,
-  from as observableFrom,
   ignoreElements,
   mergeMap,
   Observable,
 } from "rxjs";
 import log from "../../log";
 import { getInnerAndOuterTimeRanges } from "../../utils/ranges";
+import fromCancellablePromise from "../../utils/rx-from_cancellable_promise";
+import TaskCanceller, {
+  CancellationSignal,
+} from "../../utils/task_canceller";
 import { SegmentBuffer } from "./implementations";
 
 export interface IGarbageCollectorArgument {
@@ -46,6 +47,7 @@ export interface IGarbageCollectorArgument {
  * @param {Object} opt
  * @returns {Observable}
  */
+// XXX TODO
 export default function BufferGarbageCollector({
   segmentBuffer,
   currentTime$,
@@ -54,10 +56,21 @@ export default function BufferGarbageCollector({
 } : IGarbageCollectorArgument) : Observable<never> {
   return observableCombineLatest([currentTime$, maxBufferBehind$, maxBufferAhead$]).pipe(
     mergeMap(([currentTime, maxBufferBehind, maxBufferAhead]) => {
-      return clearBuffer(segmentBuffer,
-                         currentTime,
-                         maxBufferBehind,
-                         maxBufferAhead);
+      const canceller = new TaskCanceller();
+      return fromCancellablePromise(canceller, () => {
+        return clearBuffer(segmentBuffer,
+                           currentTime,
+                           maxBufferBehind,
+                           maxBufferAhead,
+                           canceller.signal);
+      }).pipe(
+        // NOTE As of now (RxJS 7.4.0), RxJS defines `ignoreElements` default
+        // first type parameter as `any` instead of the perfectly fine `unknown`,
+        // leading to linter issues, as it forbids the usage of `any`.
+        // This is why we're disabling the eslint rule.
+        /* eslint-disable-next-line @typescript-eslint/no-unsafe-argument */
+        ignoreElements()
+      );
     }));
 }
 
@@ -75,16 +88,17 @@ export default function BufferGarbageCollector({
  * @param {Number} position - The current position
  * @param {Number} maxBufferBehind
  * @param {Number} maxBufferAhead
- * @returns {Observable}
+ * @returns {Promise}
  */
-function clearBuffer(
+async function clearBuffer(
   segmentBuffer : SegmentBuffer,
   position : number,
   maxBufferBehind : number,
-  maxBufferAhead : number
-) : Observable<never> {
+  maxBufferAhead : number,
+  cancellationSignal : CancellationSignal
+) : Promise<void> {
   if (!isFinite(maxBufferBehind) && !isFinite(maxBufferAhead)) {
-    return EMPTY;
+    return Promise.resolve();
   }
 
   const cleanedupRanges : Array<{ start : number;
@@ -149,18 +163,12 @@ function clearBuffer(
 
   collectBufferBehind();
   collectBufferAhead();
-  const clean$ = observableFrom(
-    cleanedupRanges.map((range) => {
-      log.debug("GC: cleaning range from SegmentBuffer", range);
-      return segmentBuffer.removeBuffer(range.start, range.end);
-    })
-  ).pipe(concatAll(),
-        // NOTE As of now (RxJS 7.4.0), RxJS defines `ignoreElements` default
-        // first type parameter as `any` instead of the perfectly fine `unknown`,
-        // leading to linter issues, as it forbids the usage of `any`.
-        // This is why we're disabling the eslint rule.
-        /* eslint-disable-next-line @typescript-eslint/no-unsafe-argument */
-         ignoreElements());
 
-  return clean$;
+  for (const range of cleanedupRanges) {
+    log.debug("GC: cleaning range from SegmentBuffer", range);
+    if (cancellationSignal.cancellationError !== null) {
+      throw cancellationSignal.cancellationError;
+    }
+    await segmentBuffer.removeBuffer(range.start, range.end, cancellationSignal);
+  }
 }

@@ -45,7 +45,9 @@ import deferSubscriptions from "../../../utils/defer_subscriptions";
 import { fromEvent } from "../../../utils/event_emitter";
 import filterMap from "../../../utils/filter_map";
 import { IReadOnlySharedReference } from "../../../utils/reference";
+import fromCancellablePromise from "../../../utils/rx-from_cancellable_promise";
 import SortedList from "../../../utils/sorted_list";
+import TaskCanceller from "../../../utils/task_canceller";
 import WeakMapMemory from "../../../utils/weak_map_memory";
 import ABRManager from "../../abr";
 import type { IReadOnlyPlaybackObserver } from "../../api";
@@ -347,8 +349,12 @@ export default function StreamOrchestrator(
         destroyStreams$.next();
 
         return observableConcat(
-          ...rangesToClean.map(({ start, end }) =>
-            segmentBuffer.removeBuffer(start, end).pipe(ignoreElements())),
+          ...rangesToClean.map(({ start, end }) => {
+            const canceller = new TaskCanceller();
+            return fromCancellablePromise(canceller, () => {
+              return segmentBuffer.removeBuffer(start, end, canceller.signal);
+            }).pipe(ignoreElements());
+          }),
           playbackObserver.observe(true).pipe(
             take(1),
             mergeMap((observation) => {

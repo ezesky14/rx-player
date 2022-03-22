@@ -407,13 +407,7 @@ export default class HTMLTextSegmentBuffer extends SegmentBuffer {
                                element : HTMLElement; } => cue.resolution !== null);
 
     if (proportionalCues.length > 0) {
-      // XXX TODO `parent` signal?
-      this._sizeUpdateCanceller = new TaskCanceller();
-      const unregisterCanceller = this._canceller.signal.register(() => {
-        this._sizeUpdateCanceller.cancel();
-      });
-      this._sizeUpdateCanceller.signal.register(unregisterCanceller);
-
+      this._sizeUpdateCanceller = new TaskCanceller({ cancelOn: this._canceller.signal });
       const { TEXT_TRACK_SIZE_CHECKS_INTERVAL } = config.getCurrent();
       // update propertionally-sized elements periodically
       const heightWidthRef = onHeightWidthChange(this._textTrackElement,

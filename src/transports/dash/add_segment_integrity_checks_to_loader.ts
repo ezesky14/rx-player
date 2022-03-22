@@ -15,9 +15,7 @@
  */
 
 import PPromise from "../../utils/promise";
-import TaskCanceller, {
-  CancellationError,
-} from "../../utils/task_canceller";
+import TaskCanceller from "../../utils/task_canceller";
 import { ISegmentLoader } from "../types";
 import checkISOBMFFIntegrity from "../utils/check_isobmff_integrity";
 import inferSegmentContainer from "../utils/infer_segment_container";
@@ -34,12 +32,9 @@ export default function addSegmentIntegrityChecks<T>(
 ) : ISegmentLoader<T> {
   return (url, content, initialCancelSignal, callbacks) => {
     return new PPromise((res, rej) => {
-      const canceller = new TaskCanceller();
-      const unregisterCancelLstnr = initialCancelSignal
-        .register(function onCheckCancellation(err : CancellationError) {
-          canceller.cancel();
-          rej(err);
-        });
+      const unregisterCancelLstnr = initialCancelSignal.register(rej);
+
+      const canceller = new TaskCanceller({ cancelOn: initialCancelSignal });
 
       /**
        * If the data's seems to be corrupted, cancel the loading task and reject

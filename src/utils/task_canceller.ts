@@ -137,11 +137,24 @@ export default class TaskCanceller {
    * as its `signal` provide.
    * You can then pass this property to async task you wish to be cancellable.
    */
-  constructor() {
+  constructor(options? : {
+    /**
+     * If set the TaskCanceller created here will automatically be triggered
+     * when that signal emits.
+     */
+    cancelOn? : CancellationSignal | undefined;
+  } | undefined) {
     const [trigger, register] = createCancellationFunctions();
     this.isUsed = false;
     this._trigger = trigger;
     this.signal = new CancellationSignal(register);
+
+    if (options?.cancelOn !== undefined) {
+      const unregisterParent = options.cancelOn.register(() => {
+        this.cancel();
+      });
+      this.signal.register(unregisterParent);
+    }
   }
 
   /**

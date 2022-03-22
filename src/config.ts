@@ -1222,4 +1222,16 @@ export default {
    * there can be in that history.
    */
   BUFFERED_HISTORY_MAXIMUM_ENTRIES: 200,
+
+  /**
+   * Since the RxPlayer v3.26.1, a SourceBuffer's `buffered` attribute may be
+   * read directly after the segment has been completely pushed (after the
+   * corresponding `updateend` event, for example).
+   * We fear that it might still be too early for some targets, which is why we
+   * set this feature under the `SYNCHRONIZE_BUFFERED_ON_COMPLETE_SEGMENT` flag.
+   *
+   * Note that if set to `false`, certain features and improvements might not
+   * work.
+   */
+  SYNCHRONIZE_BUFFERED_ON_COMPLETE_SEGMENT: false,
 };

@@ -349,10 +349,6 @@ module.exports = {
       {
         "property": "substr",
         "message": "Please use `substring` instead.",
-      },
-      {
-        "object": "Promise",
-        "message": "Not available in IE11, use promise ponyfill instead",
       }
     ],
     "quote-props": [

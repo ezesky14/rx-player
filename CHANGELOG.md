@@ -1,6 +1,6 @@
 # Changelog
 
-## v3.27.0 (XXXX-XX-XX)
+## v3.27.0-canal.2022032300 (2022-03-23)
 
 ### Features
 
@@ -19,6 +19,7 @@
   - avoid unnecessary warning logs when loading some initialization segments [#1049]
   - TypeScript: Add forgotten TypeScript types in the exposed segment and manifest loader APIs [#1057]
   - DRM: Avoid decryption issues when a license is persisted in a `singleLicensePer` `"init-data"` mode but loaded in a `"content"` mode [#1031, #1042]
+  - subtitles/TTML: Set default values for `tts:extent` and `tts:origin` when improbable values are found
 
 ### Other improvements
 

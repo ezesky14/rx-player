@@ -1,6 +1,6 @@
 # Changelog
 
-## v3.27.0 (XXXX-XX-XX)
+## v3.27.0-canal.2022032300 (2022-03-23)
 
 ### Features
 
@@ -15,10 +15,12 @@
   - directfile: disable all audio tracks before enabling one to work-around Safari issue on MacOS Monterey [#1067]
   - avoid performing a small seek when changing the audio track [#1080]
   - api: allow switching to RELOADING state synchronously after LOADED [#1083]
+  - Wait some delay before synchronizing pushed segment with the browser's buffer to work-around rare ChromeCast and smart TV issues [#1092]
   - Safari Mobile: Improve decryption support on Safari mobile by relying on the vendored `WebKitMediaKeys` API [#1072]
   - avoid unnecessary warning logs when loading some initialization segments [#1049]
   - TypeScript: Add forgotten TypeScript types in the exposed segment and manifest loader APIs [#1057]
   - DRM: Avoid decryption issues when a license is persisted in a `singleLicensePer` `"init-data"` mode but loaded in a `"content"` mode [#1031, #1042]
+  - subtitles/TTML: Set default values for `tts:extent` and `tts:origin` when improbable values are found
 
 ### Other improvements
 

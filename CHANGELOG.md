@@ -19,6 +19,7 @@
   - avoid unnecessary warning logs when loading some initialization segments [#1049]
   - TypeScript: Add forgotten TypeScript types in the exposed segment and manifest loader APIs [#1057]
   - DRM: Avoid decryption issues when a license is persisted in a `singleLicensePer` `"init-data"` mode but loaded in a `"content"` mode [#1031, #1042]
+  - DRM: Totally avoid the theoretical possibility of leaking MediaKeySessions when a `generateRequest` or `load` call takes multiple seconds [#1093]
 
 ### Other improvements
 
@@ -27,6 +28,7 @@
   - DASH: Prioritize selectionPriority attribute over a "main" Role when ordering AdaptationSets [#1082]
   - directfile/Safari: use the `getStartDate` method in `getWallClockTime` when available to obtain true offseted times when playing HLS contents on Safari [#1055]
   - DRM: Improve DRM Session caches performance when `singleLicensePer` is set to `"content"`
+  - DRM: Stop retrying closing MediaKeySessions multiple times when it fails, instead doing it only once when it should work [#1093]
   - TypeScript: Add IBitrateEstimate, IPositionUpdate and IPlayerState types to the exported types [#1084]
   - Remove dependency on pinkie's promise ponyfill [#1058, #1090]
   - tests: add performance tests, to better catch and avoid performance regressions [#1053, #1062]

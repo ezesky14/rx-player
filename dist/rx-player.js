@@ -3217,36 +3217,6 @@ var DEFAULT_CONFIG = {
   EME_MAX_STORED_PERSISTENT_SESSION_INFORMATION: 1000,
 
   /**
-   * Attempts to closing a MediaKeySession can fail, most likely because the
-   * MediaKeySession was not initialized yet.
-   * When we consider that we're in one of these case, we will retry to close it.
-   *
-   * To avoid going into an infinite loop of retry, this number indicates a
-   * maximum number of attemps we're going to make (`0` meaning no retry at all,
-   * `1` only one retry and so on).
-   */
-  EME_SESSION_CLOSING_MAX_RETRY: 5,
-
-  /**
-   * When closing a MediaKeySession failed due to the reasons explained for the
-   * `EME_SESSION_CLOSING_MAX_RETRY` config property, we may (among other
-   * triggers) choose to wait a delay raising exponentially at each retry before
-   * that new attempt.
-   * This value indicates the initial value for this delay, in milliseconds.
-   */
-  EME_SESSION_CLOSING_INITIAL_DELAY: 100,
-
-  /**
-   * When closing a MediaKeySession failed due to the reasons explained for the
-   * `EME_SESSION_CLOSING_MAX_RETRY` config property, we may (among other
-   * triggers) choose to wait a delay raising exponentially at each retry before
-   * that new attempt.
-   * This value indicates the maximum possible value for this delay, in
-   * milliseconds.
-   */
-  EME_SESSION_CLOSING_MAX_DELAY: 1000,
-
-  /**
    * After loading a persistent MediaKeySession, the RxPlayer needs to ensure
    * that its keys still allow to decrypt a content.
    *
@@ -4722,146 +4692,6 @@ function getInitData(encryptedEvent) {
     values: values
   };
 }
-// EXTERNAL MODULE: ./src/parsers/containers/isobmff/get_box.ts
-var get_box = __webpack_require__(2297);
-;// CONCATENATED MODULE: ./src/compat/eme/generate_key_request.ts
-/**
- * Copyright 2015 CANAL+ Group
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
-
-
-
-
-/**
- * Modify "initialization data" sent to a `generateKeyRequest` EME call to
- * improve the player's browser compatibility:
- *
- *   1. some browsers/CDM have problems when the CENC PSSH box is the first
- *      encountered PSSH box in the initialization data (for the moment just
- *      Edge was noted with this behavior).
- *      We found however that it works on every browser when the CENC pssh
- *      box(es) is/are the last box(es) encountered.
- *
- *      To that end, we move CENC pssh boxes at the end of the initialization
- *      data in this function.
- *
- *   2. Some poorly encoded/packaged contents communicate both a CENC with a
- *      pssh version of 0 and one with a version of 1. We found out that this is
- *      not always well handled on some devices/browsers (on Edge and some other
- *      embedded devices that shall remain nameless for now!).
- *
- *      Here this function will filter out CENC pssh with a version different to
- *      1 when one(s) with a version of 1 is/are already present.
- *
- * If the initData is unrecognized or if a CENC PSSH is not found, this function
- * throws.
- * @param {Uint8Array} initData - Initialization data you want to patch
- * @returns {Uint8Array} - Initialization data, patched
- */
-
-function patchInitData(initData) {
-  log/* default.info */.Z.info("Compat: Trying to move CENC PSSH from init data at the end of it.");
-  var foundCencV1 = false;
-  var concatenatedCencs = new Uint8Array();
-  var resInitData = new Uint8Array();
-  var offset = 0;
-
-  while (offset < initData.length) {
-    if (initData.length < offset + 8 || (0,byte_parsing/* be4toi */.pX)(initData, offset + 4) !== PSSH_TO_INTEGER) {
-      log/* default.warn */.Z.warn("Compat: unrecognized initialization data. Cannot patch it.");
-      throw new Error("Compat: unrecognized initialization data. Cannot patch it.");
-    }
-
-    var len = (0,byte_parsing/* be4toi */.pX)(new Uint8Array(initData), offset);
-
-    if (offset + len > initData.length) {
-      log/* default.warn */.Z.warn("Compat: unrecognized initialization data. Cannot patch it.");
-      throw new Error("Compat: unrecognized initialization data. Cannot patch it.");
-    }
-
-    var currentPSSH = initData.subarray(offset, offset + len); // yep
-
-    if (initData[offset + 12] === 0x10 && initData[offset + 13] === 0x77 && initData[offset + 14] === 0xEF && initData[offset + 15] === 0xEC && initData[offset + 16] === 0xC0 && initData[offset + 17] === 0xB2 && initData[offset + 18] === 0x4D && initData[offset + 19] === 0x02 && initData[offset + 20] === 0xAC && initData[offset + 21] === 0xE3 && initData[offset + 22] === 0x3C && initData[offset + 23] === 0x1E && initData[offset + 24] === 0x52 && initData[offset + 25] === 0xE2 && initData[offset + 26] === 0xFB && initData[offset + 27] === 0x4B) {
-      var cencOffsets = (0,get_box/* getNextBoxOffsets */.Xj)(currentPSSH);
-      var version = cencOffsets === null ? undefined : currentPSSH[cencOffsets[1]];
-      log/* default.info */.Z.info("Compat: CENC PSSH found with version", version);
-
-      if (version === undefined) {
-        log/* default.warn */.Z.warn("Compat: could not read version of CENC PSSH");
-      } else if (foundCencV1 === (version === 1)) {
-        // Either `concatenatedCencs` only contains v1 or does not contain any
-        concatenatedCencs = (0,byte_parsing/* concat */.zo)(concatenatedCencs, currentPSSH);
-      } else if (version === 1) {
-        log/* default.warn */.Z.warn("Compat: cenc version 1 encountered, " + "removing every other cenc pssh box.");
-        concatenatedCencs = currentPSSH;
-        foundCencV1 = true;
-      } else {
-        log/* default.warn */.Z.warn("Compat: filtering out cenc pssh box with wrong version", version);
-      }
-    } else {
-      resInitData = (0,byte_parsing/* concat */.zo)(resInitData, currentPSSH);
-    }
-
-    offset += len;
-  }
-
-  if (offset !== initData.length) {
-    log/* default.warn */.Z.warn("Compat: unrecognized initialization data. Cannot patch it.");
-    throw new Error("Compat: unrecognized initialization data. Cannot patch it.");
-  }
-
-  return (0,byte_parsing/* concat */.zo)(resInitData, concatenatedCencs);
-}
-/**
- * Generate a request from session.
- * @param {MediaKeySession} session - MediaKeySession on which the request will
- * be done.
- * @param {Uint8Array} initData - Initialization data given e.g. by the
- * "encrypted" event for the corresponding request.
- * @param {string} initDataType - Initialization data type given e.g. by the
- * "encrypted" event for the corresponding request.
- * @param {string} sessionType - Type of session you want to generate. Consult
- * EME Specification for more information on session types.
- * @returns {Promise} - Emit when done. Errors if fails.
- */
-
-function generateKeyRequest(session, initializationDataType, initializationData) {
-  log/* default.debug */.Z.debug("Compat: Calling generateRequest on the MediaKeySession");
-  var patchedInit;
-
-  try {
-    patchedInit = patchInitData(initializationData);
-  } catch (_e) {
-    patchedInit = initializationData;
-  }
-
-  var initDataType = initializationDataType !== null && initializationDataType !== void 0 ? initializationDataType : "";
-  return session.generateRequest(initDataType, patchedInit)["catch"](function (error) {
-    if (initDataType !== "" || !(error instanceof TypeError)) {
-      throw error;
-    } // On newer EME versions of the specification, the initialization data
-    // type given to generateRequest cannot be an empty string (it returns
-    // a rejected promise with a TypeError in that case).
-    // Retry with a default "cenc" value for initialization data type if
-    // we're in that condition.
-
-
-    log/* default.warn */.Z.warn("Compat: error while calling `generateRequest` with an empty " + "initialization data type. Retrying with a default \"cenc\" value.", error);
-    return session.generateRequest("cenc", patchedInit);
-  });
-}
 // EXTERNAL MODULE: ./src/compat/event_listeners.ts + 6 modules
 var event_listeners = __webpack_require__(4804);
 // EXTERNAL MODULE: ./src/config.ts + 2 modules
@@ -4979,92 +4809,6 @@ function _attachMediaKeys() {
   }));
   return _attachMediaKeys.apply(this, arguments);
 }
-;// CONCATENATED MODULE: ./src/compat/eme/load_session.ts
-
-
-
-/**
- * Copyright 2015 CANAL+ Group
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
-
-var EME_WAITING_DELAY_LOADED_SESSION_EMPTY_KEYSTATUSES = 100;
-/**
- * Load a persistent session, based on its `sessionId`, on the given
- * MediaKeySession.
- *
- * Returns an Observable which emits:
- *   - true if the persistent MediaKeySession was found and loaded
- *   - false if no persistent MediaKeySession was found with that `sessionId`.
- * Then completes.
- *
- * The Observable throws if anything goes wrong in the process.
- * @param {MediaKeySession} session
- * @param {string} sessionId
- * @returns {Observable}
- */
-
-function loadSession(_x, _x2) {
-  return _loadSession.apply(this, arguments);
-}
-
-function _loadSession() {
-  _loadSession = (0,asyncToGenerator/* default */.Z)( /*#__PURE__*/regenerator_default().mark(function _callee(session, sessionId) {
-    var isLoaded;
-    return regenerator_default().wrap(function _callee$(_context) {
-      while (1) {
-        switch (_context.prev = _context.next) {
-          case 0:
-            log/* default.info */.Z.info("Compat/DRM: Load persisted session", sessionId);
-            _context.next = 3;
-            return session.load(sessionId);
-
-          case 3:
-            isLoaded = _context.sent;
-
-            if (!(!isLoaded || session.keyStatuses.size > 0)) {
-              _context.next = 6;
-              break;
-            }
-
-            return _context.abrupt("return", isLoaded);
-
-          case 6:
-            return _context.abrupt("return", new Promise(function (resolve) {
-              session.addEventListener("keystatuseschange", resolveWithLoadedStatus);
-              var timeout = setTimeout(resolveWithLoadedStatus, EME_WAITING_DELAY_LOADED_SESSION_EMPTY_KEYSTATUSES);
-
-              function resolveWithLoadedStatus() {
-                cleanUp();
-                resolve(isLoaded);
-              }
-
-              function cleanUp() {
-                clearTimeout(timeout);
-                session.removeEventListener("keystatuseschange", resolveWithLoadedStatus);
-              }
-            }));
-
-          case 7:
-          case "end":
-            return _context.stop();
-        }
-      }
-    }, _callee);
-  }));
-  return _loadSession.apply(this, arguments);
-}
 ;// CONCATENATED MODULE: ./src/core/decrypt/utils/is_session_usable.ts
 /**
  * Copyright 2015 CANAL+ Group
@@ -5141,7 +4885,6 @@ function isSessionUsable(loadedSession) {
  */
 
 
-
 /**
  * Create a new Session or load a persistent one on the given MediaKeys,
  * according to wanted settings and what is currently stored.
@@ -5155,10 +4898,11 @@ function isSessionUsable(loadedSession) {
  * @param {Object} stores
  * @param {Object} initData
  * @param {string} wantedSessionType
+ * @param {Object} cancelSignal
  * @returns {Promise}
  */
 
-function createSession(stores, initData, wantedSessionType) {
+function createSession(stores, initData, wantedSessionType, cancelSignal) {
   var loadedSessionsStore = stores.loadedSessionsStore,
       persistentSessionsStore = stores.persistentSessionsStore;
 
@@ -5169,7 +4913,7 @@ function createSession(stores, initData, wantedSessionType) {
     return createTemporarySession(loadedSessionsStore, initData);
   }
 
-  return createAndTryToRetrievePersistentSession(loadedSessionsStore, persistentSessionsStore, initData);
+  return createAndTryToRetrievePersistentSession(loadedSessionsStore, persistentSessionsStore, initData, cancelSignal);
 }
 /**
  * Create a new temporary MediaKeySession linked to the given initData and
@@ -5195,16 +4939,17 @@ function createTemporarySession(loadedSessionsStore, initData) {
  * @param {Object} loadedSessionsStore
  * @param {Object} persistentSessionsStore
  * @param {Object} initData
+ * @param {Object} cancelSignal
  * @returns {Promise}
  */
 
 
-function createAndTryToRetrievePersistentSession(_x, _x2, _x3) {
+function createAndTryToRetrievePersistentSession(_x, _x2, _x3, _x4) {
   return _createAndTryToRetrievePersistentSession.apply(this, arguments);
 }
 
 function _createAndTryToRetrievePersistentSession() {
-  _createAndTryToRetrievePersistentSession = (0,asyncToGenerator/* default */.Z)( /*#__PURE__*/regenerator_default().mark(function _callee2(loadedSessionsStore, persistentSessionsStore, initData) {
+  _createAndTryToRetrievePersistentSession = (0,asyncToGenerator/* default */.Z)( /*#__PURE__*/regenerator_default().mark(function _callee2(loadedSessionsStore, persistentSessionsStore, initData, cancelSignal) {
     var entry, storedEntry, hasLoadedSession, recreatePersistentSession, _recreatePersistentSession;
 
     return regenerator_default().wrap(function _callee2$(_context2) {
@@ -5218,6 +4963,14 @@ function _createAndTryToRetrievePersistentSession() {
                   while (1) {
                     switch (_context.prev = _context.next) {
                       case 0:
+                        if (!(cancelSignal.cancellationError !== null)) {
+                          _context.next = 2;
+                          break;
+                        }
+
+                        throw cancelSignal.cancellationError;
+
+                      case 2:
                         log/* default.info */.Z.info("DRM: Removing previous persistent session.");
                         persistentEntry = persistentSessionsStore.get(initData);
 
@@ -5225,10 +4978,18 @@ function _createAndTryToRetrievePersistentSession() {
                           persistentSessionsStore["delete"](persistentEntry.sessionId);
                         }
 
-                        _context.next = 5;
+                        _context.next = 7;
                         return loadedSessionsStore.closeSession(entry.mediaKeySession);
 
-                      case 5:
+                      case 7:
+                        if (!(cancelSignal.cancellationError !== null)) {
+                          _context.next = 9;
+                          break;
+                        }
+
+                        throw cancelSignal.cancellationError;
+
+                      case 9:
                         newEntry = loadedSessionsStore.createSession(initData, "persistent-license");
                         return _context.abrupt("return", {
                           type: "created-session"
@@ -5237,7 +4998,7 @@ function _createAndTryToRetrievePersistentSession() {
                           value: newEntry
                         });
 
-                      case 7:
+                      case 11:
                       case "end":
                         return _context.stop();
                     }
@@ -5251,12 +5012,20 @@ function _createAndTryToRetrievePersistentSession() {
               return _recreatePersistentSession.apply(this, arguments);
             };
 
+            if (!(cancelSignal.cancellationError !== null)) {
+              _context2.next = 4;
+              break;
+            }
+
+            throw cancelSignal.cancellationError;
+
+          case 4:
             log/* default.info */.Z.info("DRM: Creating persistent MediaKeySession");
             entry = loadedSessionsStore.createSession(initData, "persistent-license");
             storedEntry = persistentSessionsStore.getAndReuse(initData);
 
             if (!(storedEntry === null)) {
-              _context2.next = 7;
+              _context2.next = 9;
               break;
             }
 
@@ -5267,16 +5036,16 @@ function _createAndTryToRetrievePersistentSession() {
               value: entry
             });
 
-          case 7:
-            _context2.prev = 7;
-            _context2.next = 10;
-            return loadSession(entry.mediaKeySession, storedEntry.sessionId);
+          case 9:
+            _context2.prev = 9;
+            _context2.next = 12;
+            return loadedSessionsStore.loadPersistentSession(entry.mediaKeySession, storedEntry.sessionId);
 
-          case 10:
+          case 12:
             hasLoadedSession = _context2.sent;
 
             if (hasLoadedSession) {
-              _context2.next = 15;
+              _context2.next = 17;
               break;
             }
 
@@ -5289,9 +5058,9 @@ function _createAndTryToRetrievePersistentSession() {
               value: entry
             });
 
-          case 15:
+          case 17:
             if (!(hasLoadedSession && isSessionUsable(entry.mediaKeySession))) {
-              _context2.next = 19;
+              _context2.next = 21;
               break;
             }
 
@@ -5304,23 +5073,23 @@ function _createAndTryToRetrievePersistentSession() {
               value: entry
             });
 
-          case 19:
+          case 21:
             // Unusable persistent session: recreate a new session from scratch.
             log/* default.warn */.Z.warn("DRM: Previous persistent session not usable anymore.");
             return _context2.abrupt("return", recreatePersistentSession());
 
-          case 23:
-            _context2.prev = 23;
-            _context2.t0 = _context2["catch"](7);
+          case 25:
+            _context2.prev = 25;
+            _context2.t0 = _context2["catch"](9);
             log/* default.warn */.Z.warn("DRM: Unable to load persistent session: " + (_context2.t0 instanceof Error ? _context2.t0.toString() : "Unknown Error"));
             return _context2.abrupt("return", recreatePersistentSession());
 
-          case 27:
+          case 29:
           case "end":
             return _context2.stop();
         }
       }
-    }, _callee2, null, [[7, 23]]);
+    }, _callee2, null, [[9, 25]]);
   }));
   return _createAndTryToRetrievePersistentSession.apply(this, arguments);
 }
@@ -5516,7 +5285,7 @@ function _createOrLoadSession() {
 
           case 20:
             _context.next = 22;
-            return createSession(stores, initializationData, wantedSessionType);
+            return createSession(stores, initializationData, wantedSessionType, cancelSignal);
 
           case 22:
             evt = _context.sent;
@@ -5914,6 +5683,230 @@ function getMediaKeySystemAccess(mediaElement, keySystemsConfigs, cancelSignal) 
     }));
     return _recursivelyTestKeySystems.apply(this, arguments);
   }
+}
+// EXTERNAL MODULE: ./src/parsers/containers/isobmff/get_box.ts
+var get_box = __webpack_require__(2297);
+;// CONCATENATED MODULE: ./src/compat/eme/generate_key_request.ts
+/**
+ * Copyright 2015 CANAL+ Group
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+
+
+
+/**
+ * Modify "initialization data" sent to a `generateKeyRequest` EME call to
+ * improve the player's browser compatibility:
+ *
+ *   1. some browsers/CDM have problems when the CENC PSSH box is the first
+ *      encountered PSSH box in the initialization data (for the moment just
+ *      Edge was noted with this behavior).
+ *      We found however that it works on every browser when the CENC pssh
+ *      box(es) is/are the last box(es) encountered.
+ *
+ *      To that end, we move CENC pssh boxes at the end of the initialization
+ *      data in this function.
+ *
+ *   2. Some poorly encoded/packaged contents communicate both a CENC with a
+ *      pssh version of 0 and one with a version of 1. We found out that this is
+ *      not always well handled on some devices/browsers (on Edge and some other
+ *      embedded devices that shall remain nameless for now!).
+ *
+ *      Here this function will filter out CENC pssh with a version different to
+ *      1 when one(s) with a version of 1 is/are already present.
+ *
+ * If the initData is unrecognized or if a CENC PSSH is not found, this function
+ * throws.
+ * @param {Uint8Array} initData - Initialization data you want to patch
+ * @returns {Uint8Array} - Initialization data, patched
+ */
+
+function patchInitData(initData) {
+  log/* default.info */.Z.info("Compat: Trying to move CENC PSSH from init data at the end of it.");
+  var foundCencV1 = false;
+  var concatenatedCencs = new Uint8Array();
+  var resInitData = new Uint8Array();
+  var offset = 0;
+
+  while (offset < initData.length) {
+    if (initData.length < offset + 8 || (0,byte_parsing/* be4toi */.pX)(initData, offset + 4) !== PSSH_TO_INTEGER) {
+      log/* default.warn */.Z.warn("Compat: unrecognized initialization data. Cannot patch it.");
+      throw new Error("Compat: unrecognized initialization data. Cannot patch it.");
+    }
+
+    var len = (0,byte_parsing/* be4toi */.pX)(new Uint8Array(initData), offset);
+
+    if (offset + len > initData.length) {
+      log/* default.warn */.Z.warn("Compat: unrecognized initialization data. Cannot patch it.");
+      throw new Error("Compat: unrecognized initialization data. Cannot patch it.");
+    }
+
+    var currentPSSH = initData.subarray(offset, offset + len); // yep
+
+    if (initData[offset + 12] === 0x10 && initData[offset + 13] === 0x77 && initData[offset + 14] === 0xEF && initData[offset + 15] === 0xEC && initData[offset + 16] === 0xC0 && initData[offset + 17] === 0xB2 && initData[offset + 18] === 0x4D && initData[offset + 19] === 0x02 && initData[offset + 20] === 0xAC && initData[offset + 21] === 0xE3 && initData[offset + 22] === 0x3C && initData[offset + 23] === 0x1E && initData[offset + 24] === 0x52 && initData[offset + 25] === 0xE2 && initData[offset + 26] === 0xFB && initData[offset + 27] === 0x4B) {
+      var cencOffsets = (0,get_box/* getNextBoxOffsets */.Xj)(currentPSSH);
+      var version = cencOffsets === null ? undefined : currentPSSH[cencOffsets[1]];
+      log/* default.info */.Z.info("Compat: CENC PSSH found with version", version);
+
+      if (version === undefined) {
+        log/* default.warn */.Z.warn("Compat: could not read version of CENC PSSH");
+      } else if (foundCencV1 === (version === 1)) {
+        // Either `concatenatedCencs` only contains v1 or does not contain any
+        concatenatedCencs = (0,byte_parsing/* concat */.zo)(concatenatedCencs, currentPSSH);
+      } else if (version === 1) {
+        log/* default.warn */.Z.warn("Compat: cenc version 1 encountered, " + "removing every other cenc pssh box.");
+        concatenatedCencs = currentPSSH;
+        foundCencV1 = true;
+      } else {
+        log/* default.warn */.Z.warn("Compat: filtering out cenc pssh box with wrong version", version);
+      }
+    } else {
+      resInitData = (0,byte_parsing/* concat */.zo)(resInitData, currentPSSH);
+    }
+
+    offset += len;
+  }
+
+  if (offset !== initData.length) {
+    log/* default.warn */.Z.warn("Compat: unrecognized initialization data. Cannot patch it.");
+    throw new Error("Compat: unrecognized initialization data. Cannot patch it.");
+  }
+
+  return (0,byte_parsing/* concat */.zo)(resInitData, concatenatedCencs);
+}
+/**
+ * Generate a request from session.
+ * @param {MediaKeySession} session - MediaKeySession on which the request will
+ * be done.
+ * @param {string} initializationDataType - Initialization data type given e.g.
+ * by the "encrypted" event for the corresponding request.
+ * @param {Uint8Array} initializationData - Initialization data given e.g. by
+ * the "encrypted" event for the corresponding request.
+ * @returns {Promise} - Emit when done. Errors if fails.
+ */
+
+function generateKeyRequest(session, initializationDataType, initializationData) {
+  log/* default.debug */.Z.debug("Compat: Calling generateRequest on the MediaKeySession");
+  var patchedInit;
+
+  try {
+    patchedInit = patchInitData(initializationData);
+  } catch (_e) {
+    patchedInit = initializationData;
+  }
+
+  var initDataType = initializationDataType !== null && initializationDataType !== void 0 ? initializationDataType : "";
+  return session.generateRequest(initDataType, patchedInit)["catch"](function (error) {
+    if (initDataType !== "" || !(error instanceof TypeError)) {
+      throw error;
+    } // On newer EME versions of the specification, the initialization data
+    // type given to generateRequest cannot be an empty string (it returns
+    // a rejected promise with a TypeError in that case).
+    // Retry with a default "cenc" value for initialization data type if
+    // we're in that condition.
+
+
+    log/* default.warn */.Z.warn("Compat: error while calling `generateRequest` with an empty " + "initialization data type. Retrying with a default \"cenc\" value.", error);
+    return session.generateRequest("cenc", patchedInit);
+  });
+}
+;// CONCATENATED MODULE: ./src/compat/eme/load_session.ts
+
+
+
+/**
+ * Copyright 2015 CANAL+ Group
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+var EME_WAITING_DELAY_LOADED_SESSION_EMPTY_KEYSTATUSES = 100;
+/**
+ * Load a persistent session, based on its `sessionId`, on the given
+ * MediaKeySession.
+ *
+ * Returns an Observable which emits:
+ *   - true if the persistent MediaKeySession was found and loaded
+ *   - false if no persistent MediaKeySession was found with that `sessionId`.
+ * Then completes.
+ *
+ * The Observable throws if anything goes wrong in the process.
+ * @param {MediaKeySession} session
+ * @param {string} sessionId
+ * @returns {Observable}
+ */
+
+function loadSession(_x, _x2) {
+  return _loadSession.apply(this, arguments);
+}
+
+function _loadSession() {
+  _loadSession = (0,asyncToGenerator/* default */.Z)( /*#__PURE__*/regenerator_default().mark(function _callee(session, sessionId) {
+    var isLoaded;
+    return regenerator_default().wrap(function _callee$(_context) {
+      while (1) {
+        switch (_context.prev = _context.next) {
+          case 0:
+            log/* default.info */.Z.info("Compat/DRM: Load persisted session", sessionId);
+            _context.next = 3;
+            return session.load(sessionId);
+
+          case 3:
+            isLoaded = _context.sent;
+
+            if (!(!isLoaded || session.keyStatuses.size > 0)) {
+              _context.next = 6;
+              break;
+            }
+
+            return _context.abrupt("return", isLoaded);
+
+          case 6:
+            return _context.abrupt("return", new Promise(function (resolve) {
+              session.addEventListener("keystatuseschange", resolveWithLoadedStatus);
+              var timeout = setTimeout(resolveWithLoadedStatus, EME_WAITING_DELAY_LOADED_SESSION_EMPTY_KEYSTATUSES);
+
+              function resolveWithLoadedStatus() {
+                cleanUp();
+                resolve(isLoaded);
+              }
+
+              function cleanUp() {
+                clearTimeout(timeout);
+                session.removeEventListener("keystatuseschange", resolveWithLoadedStatus);
+              }
+            }));
+
+          case 7:
+          case "end":
+            return _context.stop();
+        }
+      }
+    }, _callee);
+  }));
+  return _loadSession.apply(this, arguments);
 }
 // EXTERNAL MODULE: ./src/utils/cancellable_sleep.ts
 var cancellable_sleep = __webpack_require__(7864);
@@ -6411,8 +6404,6 @@ function loaded_sessions_store_arrayLikeToArray(arr, len) { if (len == null || l
 
 
 
-
-
 /**
  * Create and store MediaKeySessions linked to a single MediaKeys
  * instance.
@@ -6434,7 +6425,7 @@ var LoadedSessionsStore = /*#__PURE__*/function () {
   }
   /**
    * Create a new MediaKeySession and store it in this store.
-   * @param {Object} initializationData
+   * @param {Object} initData
    * @param {string} sessionType
    * @returns {Object}
    */
@@ -6452,7 +6443,12 @@ var LoadedSessionsStore = /*#__PURE__*/function () {
     var entry = {
       mediaKeySession: mediaKeySession,
       sessionType: sessionType,
-      keySessionRecord: keySessionRecord
+      keySessionRecord: keySessionRecord,
+      isGeneratingRequest: false,
+      isLoadingPersistentSession: false,
+      closingStatus: {
+        type: "none"
+      }
     };
 
     if (!(0,is_null_or_undefined/* default */.Z)(mediaKeySession.closed)) {
@@ -6470,11 +6466,7 @@ var LoadedSessionsStore = /*#__PURE__*/function () {
 
     log/* default.debug */.Z.debug("DRM-LSS: Add MediaKeySession", entry.sessionType);
 
-    this._storage.push({
-      keySessionRecord: keySessionRecord,
-      mediaKeySession: mediaKeySession,
-      sessionType: sessionType
-    });
+    this._storage.push(Object.assign({}, entry));
 
     return entry;
   }
@@ -6501,29 +6493,49 @@ var LoadedSessionsStore = /*#__PURE__*/function () {
 
         this._storage.push(stored);
 
-        return {
-          keySessionRecord: stored.keySessionRecord,
-          mediaKeySession: stored.mediaKeySession,
-          sessionType: stored.sessionType
-        };
+        return Object.assign({}, stored);
       }
     }
 
     return null;
   }
   /**
-   * Close a MediaKeySession and remove its related stored information from the
+   * Get `LoadedSessionsStore`'s entry for a given MediaKeySession.
+   * Returns `null` if the given MediaKeySession is not stored in the
    * `LoadedSessionsStore`.
-   * Emit when done.
+   * @param {MediaKeySession} mediaKeySession
+   * @returns {Object|null}
+   */
+  ;
+
+  _proto.getEntryForSession = function getEntryForSession(mediaKeySession) {
+    for (var i = this._storage.length - 1; i >= 0; i--) {
+      var stored = this._storage[i];
+
+      if (stored.mediaKeySession === mediaKeySession) {
+        return Object.assign({}, stored);
+      }
+    }
+
+    return null;
+  }
+  /**
+   * Generate a license request on the given MediaKeySession, while indicating
+   * to the LoadedSessionsStore that a license-request is pending so
+   * session-closing orders are properly scheduled after it is done.
    * @param {Object} mediaKeySession
+   * @param {string} initializationDataType - Initialization data type given
+   * e.g. by the "encrypted" event for the corresponding request.
+   * @param {Uint8Array} initializationData - Initialization data given e.g. by
+   * the "encrypted" event for the corresponding request.
    * @returns {Promise}
    */
   ;
 
-  _proto.closeSession =
+  _proto.generateLicenseRequest =
   /*#__PURE__*/
   function () {
-    var _closeSession = (0,asyncToGenerator/* default */.Z)( /*#__PURE__*/regenerator_default().mark(function _callee(mediaKeySession) {
+    var _generateLicenseRequest = (0,asyncToGenerator/* default */.Z)( /*#__PURE__*/regenerator_default().mark(function _callee(mediaKeySession, initializationDataType, initializationData) {
       var entry, _iterator, _step, stored;
 
       return regenerator_default().wrap(function _callee$(_context) {
@@ -6558,25 +6570,260 @@ var LoadedSessionsStore = /*#__PURE__*/function () {
                 break;
               }
 
-              log/* default.warn */.Z.warn("DRM-LSS: No MediaKeySession found with " + "the given initData and initDataType");
-              return _context.abrupt("return", Promise.resolve(false));
+              log/* default.error */.Z.error("DRM-LSS: generateRequest error. No MediaKeySession found with " + "the given initData and initDataType");
+              return _context.abrupt("return", generateKeyRequest(mediaKeySession, initializationDataType, initializationData));
 
             case 11:
-              _context.next = 13;
-              return safelyCloseMediaKeySession(entry.mediaKeySession);
+              entry.isGeneratingRequest = true; // Note the `as string` is needed due to TypeScript not understanding that
+              // the `closingStatus` might change in the next checks
 
-            case 13:
-              return _context.abrupt("return", Promise.resolve(true));
+              if (!(entry.closingStatus.type !== "none")) {
+                _context.next = 14;
+                break;
+              }
+
+              throw new Error("The `MediaKeySession` is being closed.");
 
             case 14:
+              _context.prev = 14;
+              _context.next = 17;
+              return generateKeyRequest(mediaKeySession, initializationDataType, initializationData);
+
+            case 17:
+              _context.next = 26;
+              break;
+
+            case 19:
+              _context.prev = 19;
+              _context.t0 = _context["catch"](14);
+
+              if (!(entry === undefined)) {
+                _context.next = 23;
+                break;
+              }
+
+              throw _context.t0;
+
+            case 23:
+              entry.isGeneratingRequest = false;
+
+              if (entry.closingStatus.type === "awaiting") {
+                entry.closingStatus.start();
+              }
+
+              throw _context.t0;
+
+            case 26:
+              if (!(entry === undefined)) {
+                _context.next = 28;
+                break;
+              }
+
+              return _context.abrupt("return", undefined);
+
+            case 28:
+              entry.isGeneratingRequest = false;
+
+              if (entry.closingStatus.type === "awaiting") {
+                entry.closingStatus.start();
+              }
+
+            case 30:
             case "end":
               return _context.stop();
           }
         }
-      }, _callee, this);
+      }, _callee, this, [[14, 19]]);
     }));
 
-    function closeSession(_x) {
+    function generateLicenseRequest(_x, _x2, _x3) {
+      return _generateLicenseRequest.apply(this, arguments);
+    }
+
+    return generateLicenseRequest;
+  }()
+  /**
+   * @param {Object} mediaKeySession
+   * @param {string} sessionId
+   * @returns {Promise}
+   */
+  ;
+
+  _proto.loadPersistentSession =
+  /*#__PURE__*/
+  function () {
+    var _loadPersistentSession = (0,asyncToGenerator/* default */.Z)( /*#__PURE__*/regenerator_default().mark(function _callee2(mediaKeySession, sessionId) {
+      var entry, _iterator2, _step2, stored, ret;
+
+      return regenerator_default().wrap(function _callee2$(_context2) {
+        while (1) {
+          switch (_context2.prev = _context2.next) {
+            case 0:
+              _iterator2 = loaded_sessions_store_createForOfIteratorHelperLoose(this._storage);
+
+            case 1:
+              if ((_step2 = _iterator2()).done) {
+                _context2.next = 8;
+                break;
+              }
+
+              stored = _step2.value;
+
+              if (!(stored.mediaKeySession === mediaKeySession)) {
+                _context2.next = 6;
+                break;
+              }
+
+              entry = stored;
+              return _context2.abrupt("break", 8);
+
+            case 6:
+              _context2.next = 1;
+              break;
+
+            case 8:
+              if (!(entry === undefined)) {
+                _context2.next = 11;
+                break;
+              }
+
+              log/* default.error */.Z.error("DRM-LSS: loadPersistentSession error. No MediaKeySession found with " + "the given initData and initDataType");
+              return _context2.abrupt("return", loadSession(mediaKeySession, sessionId));
+
+            case 11:
+              entry.isLoadingPersistentSession = true; // Note the `as string` is needed due to TypeScript not understanding that
+              // the `closingStatus` might change in the next checks
+
+              if (!(entry.closingStatus.type !== "none")) {
+                _context2.next = 14;
+                break;
+              }
+
+              throw new Error("The `MediaKeySession` is being closed.");
+
+            case 14:
+              _context2.prev = 14;
+              _context2.next = 17;
+              return loadSession(mediaKeySession, sessionId);
+
+            case 17:
+              ret = _context2.sent;
+              _context2.next = 27;
+              break;
+
+            case 20:
+              _context2.prev = 20;
+              _context2.t0 = _context2["catch"](14);
+
+              if (!(entry === undefined)) {
+                _context2.next = 24;
+                break;
+              }
+
+              throw _context2.t0;
+
+            case 24:
+              entry.isLoadingPersistentSession = false;
+
+              if (entry.closingStatus.type === "awaiting") {
+                entry.closingStatus.start();
+              }
+
+              throw _context2.t0;
+
+            case 27:
+              if (!(entry === undefined)) {
+                _context2.next = 29;
+                break;
+              }
+
+              return _context2.abrupt("return", ret);
+
+            case 29:
+              entry.isLoadingPersistentSession = false;
+
+              if (entry.closingStatus.type === "awaiting") {
+                entry.closingStatus.start();
+              }
+
+              return _context2.abrupt("return", ret);
+
+            case 32:
+            case "end":
+              return _context2.stop();
+          }
+        }
+      }, _callee2, this, [[14, 20]]);
+    }));
+
+    function loadPersistentSession(_x4, _x5) {
+      return _loadPersistentSession.apply(this, arguments);
+    }
+
+    return loadPersistentSession;
+  }()
+  /**
+   * Close a MediaKeySession and remove its related stored information from the
+   * `LoadedSessionsStore`.
+   * Emit when done.
+   * @param {Object} mediaKeySession
+   * @returns {Promise}
+   */
+  ;
+
+  _proto.closeSession =
+  /*#__PURE__*/
+  function () {
+    var _closeSession = (0,asyncToGenerator/* default */.Z)( /*#__PURE__*/regenerator_default().mark(function _callee3(mediaKeySession) {
+      var entry, _iterator3, _step3, stored;
+
+      return regenerator_default().wrap(function _callee3$(_context3) {
+        while (1) {
+          switch (_context3.prev = _context3.next) {
+            case 0:
+              _iterator3 = loaded_sessions_store_createForOfIteratorHelperLoose(this._storage);
+
+            case 1:
+              if ((_step3 = _iterator3()).done) {
+                _context3.next = 8;
+                break;
+              }
+
+              stored = _step3.value;
+
+              if (!(stored.mediaKeySession === mediaKeySession)) {
+                _context3.next = 6;
+                break;
+              }
+
+              entry = stored;
+              return _context3.abrupt("break", 8);
+
+            case 6:
+              _context3.next = 1;
+              break;
+
+            case 8:
+              if (!(entry === undefined)) {
+                _context3.next = 11;
+                break;
+              }
+
+              log/* default.warn */.Z.warn("DRM-LSS: No MediaKeySession found with " + "the given initData and initDataType");
+              return _context3.abrupt("return", Promise.resolve(false));
+
+            case 11:
+              return _context3.abrupt("return", this._closeEntry(entry));
+
+            case 12:
+            case "end":
+              return _context3.stop();
+          }
+        }
+      }, _callee3, this);
+    }));
+
+    function closeSession(_x6) {
       return _closeSession.apply(this, arguments);
     }
 
@@ -6611,11 +6858,13 @@ var LoadedSessionsStore = /*#__PURE__*/function () {
   _proto.closeAllSessions =
   /*#__PURE__*/
   function () {
-    var _closeAllSessions = (0,asyncToGenerator/* default */.Z)( /*#__PURE__*/regenerator_default().mark(function _callee2() {
+    var _closeAllSessions = (0,asyncToGenerator/* default */.Z)( /*#__PURE__*/regenerator_default().mark(function _callee4() {
+      var _this2 = this;
+
       var allEntries, closingProms;
-      return regenerator_default().wrap(function _callee2$(_context2) {
+      return regenerator_default().wrap(function _callee4$(_context4) {
         while (1) {
-          switch (_context2.prev = _context2.next) {
+          switch (_context4.prev = _context4.next) {
             case 0:
               allEntries = this._storage;
               log/* default.debug */.Z.debug("DRM-LSS: Closing all current MediaKeySessions", allEntries.length); // re-initialize the storage, so that new interactions with the
@@ -6624,17 +6873,17 @@ var LoadedSessionsStore = /*#__PURE__*/function () {
 
               this._storage = [];
               closingProms = allEntries.map(function (entry) {
-                return safelyCloseMediaKeySession(entry.mediaKeySession);
+                return _this2._closeEntry(entry);
               });
-              _context2.next = 6;
+              _context4.next = 6;
               return Promise.all(closingProms);
 
             case 6:
             case "end":
-              return _context2.stop();
+              return _context4.stop();
           }
         }
-      }, _callee2, this);
+      }, _callee4, this);
     }));
 
     function closeAllSessions() {
@@ -6642,7 +6891,15 @@ var LoadedSessionsStore = /*#__PURE__*/function () {
     }
 
     return closeAllSessions;
-  }();
+  }()
+  /**
+   * Get the index of a stored MediaKeySession entry based on its
+   * `KeySessionRecord`.
+   * Returns -1 if not found.
+   * @param {Object} record
+   * @returns {number}
+   */
+  ;
 
   _proto.getIndex = function getIndex(record) {
     for (var i = 0; i < this._storage.length; i++) {
@@ -6654,13 +6911,83 @@ var LoadedSessionsStore = /*#__PURE__*/function () {
     }
 
     return -1;
-  };
+  }
+  /**
+   * Prepare the closure of a `MediaKeySession` stored as an entry of the
+   * `LoadedSessionsStore`.
+   * Allows to postpone the closure action if another MediaKeySession action
+   * is already pending.
+   * @param {Object} entry
+   * @returns {Promise.<boolean>}
+   */
+  ;
+
+  _proto._closeEntry =
+  /*#__PURE__*/
+  function () {
+    var _closeEntry2 = (0,asyncToGenerator/* default */.Z)( /*#__PURE__*/regenerator_default().mark(function _callee5(entry) {
+      var mediaKeySession;
+      return regenerator_default().wrap(function _callee5$(_context5) {
+        while (1) {
+          switch (_context5.prev = _context5.next) {
+            case 0:
+              mediaKeySession = entry.mediaKeySession;
+              return _context5.abrupt("return", new Promise(function (resolve, reject) {
+                if (entry !== undefined && (entry.isLoadingPersistentSession || entry.isGeneratingRequest)) {
+                  entry.closingStatus = {
+                    type: "awaiting",
+                    start: tryClosingEntryAndResolve
+                  };
+                } else {
+                  tryClosingEntryAndResolve();
+                }
+
+                function tryClosingEntryAndResolve() {
+                  if (entry !== undefined) {
+                    entry.closingStatus = {
+                      type: "pending"
+                    };
+                  }
+
+                  safelyCloseMediaKeySession(mediaKeySession).then(function () {
+                    if (entry !== undefined) {
+                      entry.closingStatus = {
+                        type: "done"
+                      };
+                    }
+
+                    resolve(true);
+                  })["catch"](function (err) {
+                    if (entry !== undefined) {
+                      entry.closingStatus = {
+                        type: "failed"
+                      };
+                    }
+
+                    reject(err);
+                  });
+                }
+              }));
+
+            case 2:
+            case "end":
+              return _context5.stop();
+          }
+        }
+      }, _callee5);
+    }));
+
+    function _closeEntry(_x7) {
+      return _closeEntry2.apply(this, arguments);
+    }
+
+    return _closeEntry;
+  }();
 
   return LoadedSessionsStore;
 }();
 /**
- * Close a MediaKeySession with multiple attempts if needed and do not throw if
- * this action throws an error.
+ * Close a MediaKeySession and just log an error if it fails (while resolving).
  * Emits then complete when done.
  * @param {MediaKeySession} mediaKeySession
  * @returns {Observable}
@@ -6669,107 +6996,39 @@ var LoadedSessionsStore = /*#__PURE__*/function () {
 
 
 
-function safelyCloseMediaKeySession(mediaKeySession) {
-  return recursivelyTryToCloseMediaKeySession(0);
-  /**
-   * Perform a new attempt at closing the MediaKeySession.
-   * If this operation fails due to a not-"callable" (an EME term)
-   * MediaKeySession, retry based on either a timer or on MediaKeySession
-   * events, whichever comes first.
-   * Emits then complete when done.
-   * @param {number} retryNb - The attempt number starting at 0.
-   * @returns {Observable}
-   */
+function safelyCloseMediaKeySession(_x8) {
+  return _safelyCloseMediaKeySession.apply(this, arguments);
+}
 
-  function recursivelyTryToCloseMediaKeySession(_x2) {
-    return _recursivelyTryToCloseMediaKeySession.apply(this, arguments);
-  }
-  /**
-   * Log error anouncing that we could not close the MediaKeySession and emits
-   * then complete through Observable.
-   * TODO Emit warning?
-   * @returns {Observable}
-   */
+function _safelyCloseMediaKeySession() {
+  _safelyCloseMediaKeySession = (0,asyncToGenerator/* default */.Z)( /*#__PURE__*/regenerator_default().mark(function _callee6(mediaKeySession) {
+    return regenerator_default().wrap(function _callee6$(_context6) {
+      while (1) {
+        switch (_context6.prev = _context6.next) {
+          case 0:
+            log/* default.debug */.Z.debug("DRM: Trying to close a MediaKeySession", mediaKeySession.sessionId);
+            _context6.prev = 1;
+            _context6.next = 4;
+            return closeSession(mediaKeySession);
 
+          case 4:
+            log/* default.debug */.Z.debug("DRM: Succeeded to close MediaKeySession");
+            return _context6.abrupt("return");
 
-  function _recursivelyTryToCloseMediaKeySession() {
-    _recursivelyTryToCloseMediaKeySession = (0,asyncToGenerator/* default */.Z)( /*#__PURE__*/regenerator_default().mark(function _callee3(retryNb) {
-      var _config$getCurrent, EME_SESSION_CLOSING_MAX_RETRY, EME_SESSION_CLOSING_INITIAL_DELAY, EME_SESSION_CLOSING_MAX_DELAY, nextRetryNb, delay, ksChangeSub, ksChangeProm, ksMsgSub, ksMsgProm, sleepTimer, sleepProm;
+          case 8:
+            _context6.prev = 8;
+            _context6.t0 = _context6["catch"](1);
+            log/* default.error */.Z.error("DRM: Could not close MediaKeySession: " + (_context6.t0 instanceof Error ? _context6.t0.toString() : "Unknown error"));
+            return _context6.abrupt("return");
 
-      return regenerator_default().wrap(function _callee3$(_context3) {
-        while (1) {
-          switch (_context3.prev = _context3.next) {
-            case 0:
-              log/* default.debug */.Z.debug("DRM: Trying to close a MediaKeySession", mediaKeySession.sessionId, retryNb);
-              _context3.prev = 1;
-              _context3.next = 4;
-              return closeSession(mediaKeySession);
-
-            case 4:
-              log/* default.debug */.Z.debug("DRM: Succeeded to close MediaKeySession");
-              return _context3.abrupt("return", undefined);
-
-            case 8:
-              _context3.prev = 8;
-              _context3.t0 = _context3["catch"](1);
-
-              if (!(!(_context3.t0 instanceof Error) || _context3.t0.name !== "InvalidStateError" || mediaKeySession.sessionId !== "")) {
-                _context3.next = 12;
-                break;
-              }
-
-              return _context3.abrupt("return", failToCloseSession(_context3.t0));
-
-            case 12:
-              _config$getCurrent = config/* default.getCurrent */.Z.getCurrent(), EME_SESSION_CLOSING_MAX_RETRY = _config$getCurrent.EME_SESSION_CLOSING_MAX_RETRY, EME_SESSION_CLOSING_INITIAL_DELAY = _config$getCurrent.EME_SESSION_CLOSING_INITIAL_DELAY, EME_SESSION_CLOSING_MAX_DELAY = _config$getCurrent.EME_SESSION_CLOSING_MAX_DELAY; // We will retry either:
-              //   - when an event indicates that the MediaKeySession is
-              //     initialized (`callable` is the proper EME term here)
-              //   - after a delay, raising exponentially
-
-              nextRetryNb = retryNb + 1;
-
-              if (!(nextRetryNb > EME_SESSION_CLOSING_MAX_RETRY)) {
-                _context3.next = 16;
-                break;
-              }
-
-              return _context3.abrupt("return", failToCloseSession(_context3.t0));
-
-            case 16:
-              delay = Math.min(Math.pow(2, retryNb) * EME_SESSION_CLOSING_INITIAL_DELAY, EME_SESSION_CLOSING_MAX_DELAY);
-              log/* default.warn */.Z.warn("DRM: attempt to close a mediaKeySession failed, " + "scheduling retry...", delay);
-              ksChangeProm = new Promise(function (res) {
-                ksChangeSub = (0,event_listeners/* onKeyStatusesChange$ */.eX)(mediaKeySession).subscribe(res);
-              });
-              ksMsgProm = new Promise(function (res) {
-                ksMsgSub = (0,event_listeners/* onKeyMessage$ */.GJ)(mediaKeySession).subscribe(res);
-              });
-              sleepProm = new Promise(function (res) {
-                sleepTimer = window.setTimeout(res, delay);
-              });
-              _context3.next = 23;
-              return Promise.race([ksChangeProm, ksMsgProm, sleepProm]);
-
-            case 23:
-              ksChangeSub === null || ksChangeSub === void 0 ? void 0 : ksChangeSub.unsubscribe();
-              ksMsgSub === null || ksMsgSub === void 0 ? void 0 : ksMsgSub.unsubscribe();
-              clearTimeout(sleepTimer);
-              return _context3.abrupt("return", recursivelyTryToCloseMediaKeySession(nextRetryNb));
-
-            case 27:
-            case "end":
-              return _context3.stop();
-          }
+          case 12:
+          case "end":
+            return _context6.stop();
         }
-      }, _callee3, null, [[1, 8]]);
-    }));
-    return _recursivelyTryToCloseMediaKeySession.apply(this, arguments);
-  }
-
-  function failToCloseSession(err) {
-    log/* default.error */.Z.error("DRM: Could not close MediaKeySession: " + (err instanceof Error ? err.toString() : "Unknown error"));
-    return Promise.resolve(null);
-  }
+      }
+    }, _callee6, null, [[1, 8]]);
+  }));
+  return _safelyCloseMediaKeySession.apply(this, arguments);
 }
 // EXTERNAL MODULE: ./src/utils/assert.ts
 var assert = __webpack_require__(811);
@@ -9088,7 +9347,7 @@ var ContentDecryptor = /*#__PURE__*/function (_EventEmitter) {
     var _processInitializationData2 = (0,asyncToGenerator/* default */.Z)( /*#__PURE__*/regenerator_default().mark(function _callee2(initializationData, mediaKeysData) {
       var _this4 = this;
 
-      var mediaKeySystemAccess, stores, options, firstCreatedSession, keyIds, hexKids, period, createdSessions, periodKeys, _iterator, _step, createdSess, periodKeysArr, _i, _periodKeysArr, kid, _iterator2, _step2, innerKid, wantedSessionType, _config$getCurrent, EME_DEFAULT_MAX_SIMULTANEOUS_MEDIA_KEY_SESSIONS, EME_MAX_STORED_PERSISTENT_SESSION_INFORMATION, maxSessionCacheSize, sessionRes, sessionInfo, _sessionRes$value, mediaKeySession, sessionType, isSessionPersisted, sub, requestData;
+      var mediaKeySystemAccess, stores, options, firstCreatedSession, keyIds, hexKids, period, createdSessions, periodKeys, _iterator, _step, createdSess, periodKeysArr, _i, _periodKeysArr, kid, _iterator2, _step2, innerKid, wantedSessionType, _config$getCurrent, EME_DEFAULT_MAX_SIMULTANEOUS_MEDIA_KEY_SESSIONS, EME_MAX_STORED_PERSISTENT_SESSION_INFORMATION, maxSessionCacheSize, sessionRes, sessionInfo, _sessionRes$value, mediaKeySession, sessionType, isSessionPersisted, sub, requestData, entry, indexInCurrent;
 
       return regenerator_default().wrap(function _callee2$(_context2) {
         while (1) {
@@ -9350,28 +9609,47 @@ var ContentDecryptor = /*#__PURE__*/function (_EventEmitter) {
               if (!(sessionRes.type === "created-session"
               /* Created */
               )) {
-                _context2.next = 63;
+                _context2.next = 68;
                 break;
               }
 
               requestData = initializationData.values.constructRequestData();
               _context2.prev = 55;
               _context2.next = 58;
-              return generateKeyRequest(mediaKeySession, initializationData.type, requestData);
+              return stores.loadedSessionsStore.generateLicenseRequest(mediaKeySession, initializationData.type, requestData);
 
             case 58:
-              _context2.next = 63;
+              _context2.next = 68;
               break;
 
             case 60:
               _context2.prev = 60;
               _context2.t0 = _context2["catch"](55);
-              throw new encrypted_media_error/* default */.Z("KEY_GENERATE_REQUEST_ERROR", _context2.t0 instanceof Error ? _context2.t0.toString() : "Unknown error");
+              // First check that the error was not due to the MediaKeySession closing
+              // or being closed
+              entry = stores.loadedSessionsStore.getEntryForSession(mediaKeySession);
 
-            case 63:
+              if (!(entry === null || entry.closingStatus.type !== "none")) {
+                _context2.next = 67;
+                break;
+              }
+
+              // MediaKeySession closing/closed: Just remove from handled list and abort.
+              indexInCurrent = this._currentSessions.indexOf(sessionInfo);
+
+              if (indexInCurrent >= 0) {
+                this._currentSessions.splice(indexInCurrent, 1);
+              }
+
               return _context2.abrupt("return", Promise.resolve());
 
-            case 64:
+            case 67:
+              throw new encrypted_media_error/* default */.Z("KEY_GENERATE_REQUEST_ERROR", _context2.t0 instanceof Error ? _context2.t0.toString() : "Unknown error");
+
+            case 68:
+              return _context2.abrupt("return", Promise.resolve());
+
+            case 69:
             case "end":
               return _context2.stop();
           }
@@ -38391,8 +38669,8 @@ __webpack_require__.d(__webpack_exports__, {
   "Z": function() { return /* binding */ deferSubscriptions; }
 });
 
-// EXTERNAL MODULE: ./node_modules/rxjs/node_modules/tslib/tslib.es6.js
-var tslib_es6 = __webpack_require__(5987);
+// EXTERNAL MODULE: ./node_modules/tslib/tslib.es6.js
+var tslib_es6 = __webpack_require__(655);
 // EXTERNAL MODULE: ./node_modules/rxjs/dist/esm5/internal/scheduler/AsyncAction.js + 2 modules
 var AsyncAction = __webpack_require__(8337);
 ;// CONCATENATED MODULE: ./node_modules/rxjs/dist/esm5/internal/util/Immediate.js
@@ -42694,7 +42972,7 @@ function isSubscriber(value) {
 /* harmony export */ __webpack_require__.d(__webpack_exports__, {
 /* harmony export */   "t": function() { return /* binding */ ReplaySubject; }
 /* harmony export */ });
-/* harmony import */ var tslib__WEBPACK_IMPORTED_MODULE_0__ = __webpack_require__(5987);
+/* harmony import */ var tslib__WEBPACK_IMPORTED_MODULE_0__ = __webpack_require__(655);
 /* harmony import */ var _Subject__WEBPACK_IMPORTED_MODULE_2__ = __webpack_require__(6716);
 /* harmony import */ var _scheduler_dateTimestampProvider__WEBPACK_IMPORTED_MODULE_1__ = __webpack_require__(4318);
 
@@ -42770,8 +43048,8 @@ __webpack_require__.d(__webpack_exports__, {
 
 // UNUSED EXPORTS: AnonymousSubject
 
-// EXTERNAL MODULE: ./node_modules/rxjs/node_modules/tslib/tslib.es6.js
-var tslib_es6 = __webpack_require__(5987);
+// EXTERNAL MODULE: ./node_modules/tslib/tslib.es6.js
+var tslib_es6 = __webpack_require__(655);
 // EXTERNAL MODULE: ./node_modules/rxjs/dist/esm5/internal/Observable.js + 1 modules
 var Observable = __webpack_require__(1480);
 // EXTERNAL MODULE: ./node_modules/rxjs/dist/esm5/internal/Subscription.js + 1 modules
@@ -42961,8 +43239,8 @@ __webpack_require__.d(__webpack_exports__, {
 
 // UNUSED EXPORTS: EMPTY_OBSERVER
 
-// EXTERNAL MODULE: ./node_modules/rxjs/node_modules/tslib/tslib.es6.js
-var tslib_es6 = __webpack_require__(5987);
+// EXTERNAL MODULE: ./node_modules/tslib/tslib.es6.js
+var tslib_es6 = __webpack_require__(655);
 // EXTERNAL MODULE: ./node_modules/rxjs/dist/esm5/internal/util/isFunction.js
 var isFunction = __webpack_require__(8474);
 // EXTERNAL MODULE: ./node_modules/rxjs/dist/esm5/internal/Subscription.js + 1 modules
@@ -43157,8 +43435,8 @@ __webpack_require__.d(__webpack_exports__, {
   "Nn": function() { return /* binding */ isSubscription; }
 });
 
-// EXTERNAL MODULE: ./node_modules/rxjs/node_modules/tslib/tslib.es6.js
-var tslib_es6 = __webpack_require__(5987);
+// EXTERNAL MODULE: ./node_modules/tslib/tslib.es6.js
+var tslib_es6 = __webpack_require__(655);
 // EXTERNAL MODULE: ./node_modules/rxjs/dist/esm5/internal/util/isFunction.js
 var isFunction = __webpack_require__(8474);
 // EXTERNAL MODULE: ./node_modules/rxjs/dist/esm5/internal/util/createErrorClass.js
@@ -43741,7 +44019,7 @@ function from(input, scheduler) {
 /* harmony export */ __webpack_require__.d(__webpack_exports__, {
 /* harmony export */   "R": function() { return /* binding */ fromEvent; }
 /* harmony export */ });
-/* harmony import */ var tslib__WEBPACK_IMPORTED_MODULE_2__ = __webpack_require__(5987);
+/* harmony import */ var tslib__WEBPACK_IMPORTED_MODULE_2__ = __webpack_require__(655);
 /* harmony import */ var _observable_innerFrom__WEBPACK_IMPORTED_MODULE_5__ = __webpack_require__(7878);
 /* harmony import */ var _Observable__WEBPACK_IMPORTED_MODULE_6__ = __webpack_require__(1480);
 /* harmony import */ var _operators_mergeMap__WEBPACK_IMPORTED_MODULE_4__ = __webpack_require__(7877);
@@ -43818,7 +44096,7 @@ function isEventTarget(target) {
 /* harmony export */   "Xf": function() { return /* binding */ innerFrom; }
 /* harmony export */ });
 /* unused harmony exports fromInteropObservable, fromArrayLike, fromPromise, fromIterable, fromAsyncIterable, fromReadableStreamLike */
-/* harmony import */ var tslib__WEBPACK_IMPORTED_MODULE_11__ = __webpack_require__(5987);
+/* harmony import */ var tslib__WEBPACK_IMPORTED_MODULE_11__ = __webpack_require__(655);
 /* harmony import */ var _util_isArrayLike__WEBPACK_IMPORTED_MODULE_2__ = __webpack_require__(5685);
 /* harmony import */ var _util_isPromise__WEBPACK_IMPORTED_MODULE_3__ = __webpack_require__(3841);
 /* harmony import */ var _Observable__WEBPACK_IMPORTED_MODULE_0__ = __webpack_require__(1480);
@@ -44137,7 +44415,7 @@ function timer(dueTime, intervalOrScheduler, scheduler) {
 /* harmony export */ __webpack_require__.d(__webpack_exports__, {
 /* harmony export */   "Q": function() { return /* binding */ OperatorSubscriber; }
 /* harmony export */ });
-/* harmony import */ var tslib__WEBPACK_IMPORTED_MODULE_0__ = __webpack_require__(5987);
+/* harmony import */ var tslib__WEBPACK_IMPORTED_MODULE_0__ = __webpack_require__(655);
 /* harmony import */ var _Subscriber__WEBPACK_IMPORTED_MODULE_1__ = __webpack_require__(6267);
 
 
@@ -44532,7 +44810,7 @@ function scan(accumulator, seed) {
 /* harmony export */ __webpack_require__.d(__webpack_exports__, {
 /* harmony export */   "B": function() { return /* binding */ share; }
 /* harmony export */ });
-/* harmony import */ var tslib__WEBPACK_IMPORTED_MODULE_4__ = __webpack_require__(5987);
+/* harmony import */ var tslib__WEBPACK_IMPORTED_MODULE_4__ = __webpack_require__(655);
 /* harmony import */ var _observable_from__WEBPACK_IMPORTED_MODULE_3__ = __webpack_require__(3102);
 /* harmony import */ var _operators_take__WEBPACK_IMPORTED_MODULE_5__ = __webpack_require__(4727);
 /* harmony import */ var _Subject__WEBPACK_IMPORTED_MODULE_0__ = __webpack_require__(6716);
@@ -44858,7 +45136,7 @@ function tap(observerOrNext, error, complete) {
 /* harmony export */ __webpack_require__.d(__webpack_exports__, {
 /* harmony export */   "M": function() { return /* binding */ withLatestFrom; }
 /* harmony export */ });
-/* harmony import */ var tslib__WEBPACK_IMPORTED_MODULE_6__ = __webpack_require__(5987);
+/* harmony import */ var tslib__WEBPACK_IMPORTED_MODULE_6__ = __webpack_require__(655);
 /* harmony import */ var _util_lift__WEBPACK_IMPORTED_MODULE_1__ = __webpack_require__(6798);
 /* harmony import */ var _OperatorSubscriber__WEBPACK_IMPORTED_MODULE_3__ = __webpack_require__(2566);
 /* harmony import */ var _observable_innerFrom__WEBPACK_IMPORTED_MODULE_2__ = __webpack_require__(7878);
@@ -44917,8 +45195,8 @@ __webpack_require__.d(__webpack_exports__, {
   "o": function() { return /* binding */ AsyncAction; }
 });
 
-// EXTERNAL MODULE: ./node_modules/rxjs/node_modules/tslib/tslib.es6.js
-var tslib_es6 = __webpack_require__(5987);
+// EXTERNAL MODULE: ./node_modules/tslib/tslib.es6.js
+var tslib_es6 = __webpack_require__(655);
 // EXTERNAL MODULE: ./node_modules/rxjs/dist/esm5/internal/Subscription.js + 1 modules
 var Subscription = __webpack_require__(5720);
 ;// CONCATENATED MODULE: ./node_modules/rxjs/dist/esm5/internal/scheduler/Action.js
@@ -45058,8 +45336,8 @@ __webpack_require__.d(__webpack_exports__, {
   "v": function() { return /* binding */ AsyncScheduler; }
 });
 
-// EXTERNAL MODULE: ./node_modules/rxjs/node_modules/tslib/tslib.es6.js
-var tslib_es6 = __webpack_require__(5987);
+// EXTERNAL MODULE: ./node_modules/tslib/tslib.es6.js
+var tslib_es6 = __webpack_require__(655);
 // EXTERNAL MODULE: ./node_modules/rxjs/dist/esm5/internal/scheduler/dateTimestampProvider.js
 var dateTimestampProvider = __webpack_require__(4318);
 ;// CONCATENATED MODULE: ./node_modules/rxjs/dist/esm5/internal/Scheduler.js
@@ -45162,7 +45440,7 @@ var dateTimestampProvider = {
 /* harmony export */ __webpack_require__.d(__webpack_exports__, {
 /* harmony export */   "z": function() { return /* binding */ timeoutProvider; }
 /* harmony export */ });
-/* harmony import */ var tslib__WEBPACK_IMPORTED_MODULE_0__ = __webpack_require__(5987);
+/* harmony import */ var tslib__WEBPACK_IMPORTED_MODULE_0__ = __webpack_require__(655);
 
 var timeoutProvider = {
     setTimeout: function () {
@@ -45479,7 +45757,7 @@ function isPromise(value) {
 /* harmony export */   "L": function() { return /* binding */ isReadableStreamLike; },
 /* harmony export */   "Q": function() { return /* binding */ readableStreamLikeToAsyncGenerator; }
 /* harmony export */ });
-/* harmony import */ var tslib__WEBPACK_IMPORTED_MODULE_0__ = __webpack_require__(5987);
+/* harmony import */ var tslib__WEBPACK_IMPORTED_MODULE_0__ = __webpack_require__(655);
 /* harmony import */ var _isFunction__WEBPACK_IMPORTED_MODULE_1__ = __webpack_require__(8474);
 
 
@@ -45578,7 +45856,7 @@ function operate(init) {
 /* harmony export */ __webpack_require__.d(__webpack_exports__, {
 /* harmony export */   "Z": function() { return /* binding */ mapOneOrManyArgs; }
 /* harmony export */ });
-/* harmony import */ var tslib__WEBPACK_IMPORTED_MODULE_0__ = __webpack_require__(5987);
+/* harmony import */ var tslib__WEBPACK_IMPORTED_MODULE_0__ = __webpack_require__(655);
 /* harmony import */ var _operators_map__WEBPACK_IMPORTED_MODULE_1__ = __webpack_require__(9127);
 
 
@@ -45645,7 +45923,7 @@ function createInvalidObservableTypeError(input) {
 
 /***/ }),
 
-/***/ 5987:
+/***/ 655:
 /***/ (function(__unused_webpack_module, __webpack_exports__, __webpack_require__) {
 
 "use strict";
@@ -56363,8 +56641,8 @@ function raceInit(sources) {
     };
 }
 //# sourceMappingURL=race.js.map
-// EXTERNAL MODULE: ./node_modules/rxjs/node_modules/tslib/tslib.es6.js
-var tslib_es6 = __webpack_require__(5987);
+// EXTERNAL MODULE: ./node_modules/tslib/tslib.es6.js
+var tslib_es6 = __webpack_require__(655);
 ;// CONCATENATED MODULE: ./node_modules/rxjs/dist/esm5/internal/operators/takeLast.js
 
 

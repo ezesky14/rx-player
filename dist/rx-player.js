@@ -11453,7 +11453,7 @@ function StallAvoider(playbackObserver, manifest, lockedStream$, discontinuityUp
     if (nextBufferRangeGap < BUFFER_DISCONTINUITY_THRESHOLD) {
       var seekTo = freezePosition + nextBufferRangeGap + EPSILON;
 
-      if (playbackObserver.getCurrentTime() < seekTo && !observation.paused) {
+      if (playbackObserver.getCurrentTime() < seekTo) {
         log/* default.warn */.Z.warn("Init: discontinuity encountered inferior to the threshold", freezePosition, seekTo, BUFFER_DISCONTINUITY_THRESHOLD);
         playbackObserver.setCurrentTime(seekTo);
         return events_generators/* default.warning */.Z.warning(generateDiscontinuityError(freezePosition, seekTo));
@@ -60440,7 +60440,7 @@ var Player = /*#__PURE__*/function (_EventEmitter) {
     videoElement.preload = "auto";
     _this.version =
     /* PLAYER_VERSION */
-    "3.27.0";
+    "3.27.0-dev.2022032800";
     _this.log = log/* default */.Z;
     _this.state = "STOPPED";
     _this.videoElement = videoElement;
@@ -63269,7 +63269,7 @@ var Player = /*#__PURE__*/function (_EventEmitter) {
 
 Player.version =
 /* PLAYER_VERSION */
-"3.27.0";
+"3.27.0-dev.2022032800";
 /* harmony default export */ var public_api = (Player);
 ;// CONCATENATED MODULE: ./src/core/api/index.ts
 /**

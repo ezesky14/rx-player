@@ -30,6 +30,7 @@
   - DRM: Improve DRM Session caches performance when `singleLicensePer` is set to `"content"`
   - DRM: Stop retrying closing MediaKeySessions multiple times when it fails, instead doing it only once when it should work [#1093]
   - TypeScript: Add IBitrateEstimate, IPositionUpdate and IPlayerState types to the exported types [#1084]
+  - Do not automatically seek small gaps in the buffer when playback is paused.
   - Remove dependency on pinkie's promise ponyfill [#1058, #1090]
   - tests: add performance tests, to better catch and avoid performance regressions [#1053, #1062]
   - DRM: Refactor DRM logic for better maintainability. DRM-linked logs are now prefixed by `DRM:` instead of `EME:` like previously [#1042]

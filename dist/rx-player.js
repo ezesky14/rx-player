@@ -46575,6 +46575,48 @@ function skipWhile(predicate) {
 var take = __webpack_require__(4727);
 // EXTERNAL MODULE: ./src/compat/event_listeners.ts + 6 modules
 var event_listeners = __webpack_require__(4804);
+;// CONCATENATED MODULE: ./src/compat/get_start_date.ts
+/**
+ * Copyright 2015 CANAL+ Group
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+/**
+ * Calculating a live-offseted media position necessitate to obtain first an
+ * offset, and then adding that offset to the wanted position.
+ *
+ * That offset is in most case present inside the Manifest file, yet in cases
+ * without it or without a Manifest, such as the "directfile" mode, the RxPlayer
+ * won't know that offset.
+ *
+ * Thankfully Safari declares a `getStartDate` method allowing to obtain that
+ * offset when available. This logic is mainly useful when playing HLS contents
+ * in directfile mode on Safari.
+ * @param {HTMLMediaElement} mediaElement
+ * @returns {number|undefined}
+ */
+function getStartDate(mediaElement) {
+  var _mediaElement = mediaElement;
+
+  if (typeof _mediaElement.getStartDate === "function") {
+    var startDate = _mediaElement.getStartDate();
+
+    if (typeof startDate === "number" && !isNaN(startDate)) {
+      return startDate;
+    }
+  }
+}
 ;// CONCATENATED MODULE: ./src/compat/fullscreen.ts
 /**
  * Copyright 2015 CANAL+ Group
@@ -61343,25 +61385,8 @@ var Player = /*#__PURE__*/function (_EventEmitter) {
         manifest = _this$_priv_contentIn4.manifest;
 
     if (isDirectFile) {
-      // Calculating the "wall-clock time" necessitate to obtain first an offset,
-      // and then adding that offset to the HTMLMediaElement's current position.
-      // That offset is in most case present inside the Manifest file, yet in
-      // directfile mode, the RxPlayer won't parse that file, the browser does it.
-      //
-      // Thankfully Safari declares a `getStartDate` method allowing to obtain
-      // that offset when available. This logic is thus mainly useful when
-      // playing HLS contents in directfile mode on Safari.
-      var mediaElement = this.videoElement;
-
-      if (typeof mediaElement.getStartDate === "function") {
-        var startDate = mediaElement.getStartDate();
-
-        if (typeof startDate === "number" && !isNaN(startDate)) {
-          return startDate + mediaElement.currentTime;
-        }
-      }
-
-      return mediaElement.currentTime;
+      var startDate = getStartDate(this.videoElement);
+      return (startDate !== null && startDate !== void 0 ? startDate : 0) + this.videoElement.currentTime;
     }
 
     if (manifest !== null) {
@@ -61669,6 +61694,8 @@ var Player = /*#__PURE__*/function (_EventEmitter) {
   ;
 
   _proto.seekTo = function seekTo(time) {
+    var _a;
+
     if (this.videoElement === null) {
       throw new Error("Disposed player");
     }
@@ -61698,7 +61725,19 @@ var Player = /*#__PURE__*/function (_EventEmitter) {
       } else if (!(0,is_null_or_undefined/* default */.Z)(timeObj.position)) {
         positionWanted = timeObj.position;
       } else if (!(0,is_null_or_undefined/* default */.Z)(timeObj.wallClockTime)) {
-        positionWanted = isDirectFile || manifest === null ? timeObj.wallClockTime : timeObj.wallClockTime - (manifest.availabilityStartTime !== undefined ? manifest.availabilityStartTime : 0);
+        if (manifest !== null) {
+          positionWanted = timeObj.wallClockTime - ((_a = manifest.availabilityStartTime) !== null && _a !== void 0 ? _a : 0);
+        } else if (isDirectFile && this.videoElement !== null) {
+          var startDate = getStartDate(this.videoElement);
+
+          if (startDate !== undefined) {
+            positionWanted = startDate + timeObj.wallClockTime;
+          }
+        }
+
+        if (positionWanted === undefined) {
+          positionWanted = timeObj.wallClockTime;
+        }
       } else {
         throw new Error("invalid time object. You must set one of the " + "following properties: \"relative\", \"position\" or " + "\"wallClockTime\"");
       }
@@ -63190,6 +63229,12 @@ var Player = /*#__PURE__*/function (_EventEmitter) {
       var ast = (_a = manifest.availabilityStartTime) !== null && _a !== void 0 ? _a : 0;
       positionData.wallClockTime = observation.position + ast;
       positionData.liveGap = maximumPosition - observation.position;
+    } else if (isDirectFile && this.videoElement !== null) {
+      var startDate = getStartDate(this.videoElement);
+
+      if (startDate !== undefined) {
+        positionData.wallClockTime = startDate + observation.position;
+      }
     }
 
     this.trigger("positionUpdate", positionData);

@@ -27,7 +27,7 @@
   - DASH: always consider that the non-last Period is finished when it contains SegmentTimeline elements [#1047]
   - add better buffer cleaning logic on a browser's `QuotaExceededError` to better handle memory limitations [#1065]
   - DASH: Prioritize selectionPriority attribute over a "main" Role when ordering AdaptationSets [#1082]
-  - directfile/Safari: use the `getStartDate` method in `getWallClockTime` when available to obtain true offseted times when playing HLS contents on Safari [#1055]
+  - directfile/Safari: use the `getStartDate` method in `getWallClockTime`, `seekTo` and the `positionUpdate` event when available to obtain true offseted "wall-clock" times when playing HLS contents on Safari [#1055]
   - DRM: Improve DRM Session caches performance when `singleLicensePer` is set to `"content"`
   - DRM: Stop retrying closing MediaKeySessions multiple times when it fails, instead doing it only once when it should work [#1093]
   - TypeScript: Add IBitrateEstimate, IPositionUpdate and IPlayerState types to the exported types [#1084]

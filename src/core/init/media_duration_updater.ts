@@ -20,13 +20,13 @@ import {
   EMPTY,
   filter,
   fromEvent as observableFromEvent,
-  ignoreElements,
   interval as observableInterval,
   map,
   merge as observableMerge,
   Observable,
   of as observableOf,
   startWith,
+  Subscription,
   switchMap,
   take,
   tap,
@@ -38,59 +38,109 @@ import {
 } from "../../compat/event_listeners";
 import log from "../../log";
 import Manifest, {
-  Adaptation,
+  Adaptation, IRepresentationIndex,
 } from "../../manifest";
 import { fromEvent } from "../../utils/event_emitter";
 import createSharedReference, {
-  IReadOnlySharedReference,
+  ISharedReference,
 } from "../../utils/reference";
 
 /** Number of seconds in a regular year. */
 const YEAR_IN_SECONDS = 365 * 24 * 3600;
 
 /**
- * Keep the MediaSource duration up-to-date with the Manifest one on
- * subscription:
- * Set the current duration initially and then update if needed after
- * each Manifest updates.
- * @param {Object} manifest
- * @param {MediaSource} mediaSource
- * XXX TODO JSDoc
- * @returns {Observable}
+ * Keep the MediaSource's duration up-to-date with what is being played.
+ * @class MediaDurationUpdater
  */
-export default function DurationUpdater(
-  manifest : Manifest,
-  mediaSource : MediaSource,
-  lastAudioAdaptationRef : IReadOnlySharedReference<undefined | Adaptation | null>,
-  lastVideoAdaptationRef : IReadOnlySharedReference<undefined | Adaptation | null>
-) : Observable<never> {
-  const lastSetDuration = createSharedReference<number | undefined>(undefined);
-  return isMediaSourceOpened$(mediaSource).pipe(
-    switchMap((canUpdate) =>
-      canUpdate ? observableCombineLatest([lastAudioAdaptationRef.asObservable(),
-                                           lastVideoAdaptationRef.asObservable(),
-                                           fromEvent(manifest, "manifestUpdate")
-                                             .pipe(startWith(null))]) :
-                  EMPTY
-    ),
-    switchMap(([lastAudioAdapVal, lastVideoAdapVal]) =>
-      whenSourceBuffersEndedUpdates$(mediaSource.sourceBuffers).pipe(
-        take(1)
-      ).pipe(tap(() => {
-        const newDuration = setMediaSourceDuration(mediaSource,
-                                                   manifest,
-                                                   lastSetDuration.getValue(),
-                                                   lastAudioAdapVal,
-                                                   lastVideoAdapVal);
-        lastSetDuration.setValue(newDuration ?? undefined);
-      }))
-    ),
-    // NOTE As of now (RxJS 7.4.0), RxJS defines `ignoreElements` default
-    // first type parameter as `any` instead of the perfectly fine `unknown`,
-    // leading to linter issues, as it forbids the usage of `any`.
-    // This is why we're disabling the eslint rule.
-    /* eslint-disable-next-line @typescript-eslint/no-unsafe-argument */
-    ignoreElements());
+export default class MediaDurationUpdater {
+  private _subscription : Subscription;
+  /**
+   * The last known audio Adaptation (i.e. track) chosen for the last Period.
+   * Useful to determinate the duration of the current content.
+   * `undefined` if the audio track for the last Period has never been known yet.
+   * `null` if there are no chosen audio Adaptation.
+   */
+  private _lastAudioRepresentation : ISharedReference<undefined |
+                                                      Adaptation |
+                                                      null>;
+  /**
+   * The last known video Adaptation (i.e. track) chosen for the last Period.
+   * Useful to determinate the duration of the current content.
+   * `undefined` if the video track for the last Period has never been known yet.
+   * `null` if there are no chosen video Adaptation.
+   */
+  private _lastVideoRepresentation : ISharedReference<undefined |
+                                                      Adaptation |
+                                                      null>;
+
+  /**
+   * Create a new `MediaDurationUpdater` that will keep the given MediaSource's
+   * duration as soon as possible.
+   * This duration will be updated until the `stop` method is called.
+   * @param {Object} manifest - The Manifest currently played.
+   * For another content, you will have to create another `MediaDurationUpdater`.
+   * @param {MediaSource} mediaSource - The MediaSource on which the content is
+   * pushed.
+   * @param {HTMLMediaElement} mediaElement
+   */
+  constructor(
+    manifest : Manifest,
+    mediaSource : MediaSource,
+    mediaElement : HTMLMediaElement
+  ) {
+    this._lastAudioRepresentation = createSharedReference(undefined);
+    this._lastVideoRepresentation = createSharedReference(undefined);
+    this._subscription = isMediaSourceOpened$(mediaSource).pipe(
+      switchMap((canUpdate) =>
+        canUpdate ? observableCombineLatest([this._lastAudioRepresentation.asObservable(),
+                                             this._lastVideoRepresentation.asObservable(),
+                                             fromEvent(manifest, "manifestUpdate")
+                                               .pipe(startWith(null))]) :
+                    EMPTY
+      ),
+      switchMap(([lastAudioAdapVal, lastVideoAdapVal]) =>
+        whenSourceBuffersEndedUpdates$(mediaSource.sourceBuffers).pipe(
+          take(1)
+        ).pipe(tap(() => {
+          setMediaSourceDuration(mediaSource,
+                                 mediaElement,
+                                 manifest,
+                                 lastAudioAdapVal,
+                                 lastVideoAdapVal);
+        }))
+      )).subscribe();
+  }
+
+  /**
+   * By default, the `MediaDurationUpdater` only set a safe estimate for the
+   * MediaSource's duration.
+   * A more precize duration can be set by communicating the video Adaptation
+   * last loaded for the last Period.
+   * @param {Object} adaptation
+   */
+  public updateLastVideoAdaptation(adaptation : Adaptation | null) {
+    this._lastVideoRepresentation.setValue(adaptation);
+  }
+
+  /**
+   * By default, the `MediaDurationUpdater` only set a safe estimate for the
+   * MediaSource's duration.
+   * A more precize duration can be set by communicating the audio Adaptation
+   * last loaded for the last Period.
+   * @param {Object} adaptation
+   */
+  public updateLastAudioAdaptation(adaptation : Adaptation | null) {
+    this._lastAudioRepresentation.setValue(adaptation);
+  }
+
+  /**
+   * Stop the `MediaDurationUpdater` from updating and free its resources.
+   * Once stopped, it is not possible to start it again, beside creating another
+   * `MediaDurationUpdater`.
+   */
+  public stop() {
+    this._subscription.unsubscribe();
+  }
 }
 
 /**
@@ -102,36 +152,30 @@ export default function DurationUpdater(
  *   - `null` if it hasn'nt been updated
  *
  * @param {MediaSource} mediaSource
+ * @param {HTMLMediaElement} mediaElement
  * @param {Object} manifest
- * @param {number | undefined} lastSetDuration
  * @returns {Observable.<number | null>}
  */
 function setMediaSourceDuration(
   mediaSource: MediaSource,
+  mediaElement: HTMLMediaElement,
   manifest: Manifest,
-  lastSetDuration: number | undefined,
   lastAudioAdaptationRef : undefined | Adaptation | null,
   lastVideoAdaptationRef : undefined | Adaptation | null
 ): number | null {
   const newDuration = getCalculatedContentDuration(manifest,
                                                    lastAudioAdaptationRef,
                                                    lastVideoAdaptationRef);
-  // XXX TODO
-  if (mediaSource.duration >= newDuration ||
-      // Even if the MediaSource duration is different than the duration that
-      // we want to set now, the last duration we wanted to set may be the same,
-      // as the MediaSource duration may have been changed by the browser.
-      //
-      // In that case, we do not want to update it.
-      //
-      newDuration === lastSetDuration) {
+  const bufferedLen = mediaElement.buffered.length;
+  if ((bufferedLen > 0 && mediaElement.buffered.end(bufferedLen - 1) >= newDuration)) {
+    // We already buffered further than the duration we want to set.
+    // Keep the duration that was set at that time as a security.
     return null;
   }
   if (isNaN(mediaSource.duration) || !isFinite(mediaSource.duration) ||
       newDuration - mediaSource.duration > 0.01) {
-    log.info("Init: Updating duration", newDuration);
     try {
-
+      log.info("Init: Updating duration", newDuration);
       mediaSource.duration = newDuration;
     } catch (err) {
       log.warn("Duration Updater: Can't update duration on the MediaSource.", err);
@@ -248,15 +292,25 @@ function getLastPositionFromAdaptation(
 ) : number | undefined | null {
   const { representations } = adaptation;
   let min : null | number = null;
-  // XXX TODO optimize when index is the same?
+
+  /**
+   * Some Manifest parsers use the exact same `IRepresentationIndex` reference
+   * for each Representation of a given Adaptation, because in the actual source
+   * Manifest file, indexing data is often defined at Adaptation-level.
+   * This variable allows to optimize the logic here when this is the case.
+   */
+  let lastIndex : IRepresentationIndex | undefined;
   for (let i = 0; i < representations.length; i++) {
-    const lastPosition = representations[i].index.getLastPosition();
-    if (lastPosition === undefined) { // we cannot tell
-      return undefined;
-    }
-    if (lastPosition !== null) {
-      min = min == null ? lastPosition :
-                          Math.min(min, lastPosition);
+    if (representations[i].index !== lastIndex) {
+      lastIndex = representations[i].index;
+      const lastPosition = representations[i].index.getLastPosition();
+      if (lastPosition === undefined) { // we cannot tell
+        return undefined;
+      }
+      if (lastPosition !== null) {
+        min = min == null ? lastPosition :
+                            Math.min(min, lastPosition);
+      }
     }
   }
   if (min === null) { // It means that all positions were null === no segments (yet?)

@@ -30,13 +30,8 @@ import {
 } from "rxjs";
 import { MediaError } from "../../errors";
 import log from "../../log";
-import Manifest, {
-  Adaptation,
-} from "../../manifest";
-import createSharedReference, {
-  IReadOnlySharedReference,
-  ISharedReference,
-} from "../../utils/reference";
+import Manifest from "../../manifest";
+import { IReadOnlySharedReference } from "../../utils/reference";
 import ABRManager from "../abr";
 import { PlaybackObserver } from "../api";
 import { SegmentFetcherCreator } from "../fetchers";
@@ -45,10 +40,10 @@ import StreamOrchestrator, {
   IStreamOrchestratorOptions,
 } from "../stream";
 import createStreamPlaybackObserver from "./create_stream_playback_observer";
-import DurationUpdater from "./duration_updater";
 import emitLoadedEvent from "./emit_loaded_event";
 import { maintainEndOfStream } from "./end_of_stream";
 import initialSeekAndPlay from "./initial_seek_and_play";
+import MediaDurationUpdater from "./media_duration_updater";
 import StallAvoider, {
   IDiscontinuityEvent,
   ILockedStreamEvent,
@@ -108,29 +103,10 @@ export default function createMediaSourceLoader(
     initialTime : number,
     autoPlay : boolean
   ) : Observable<IMediaSourceLoaderEvent> {
-    /**
-     * The last known audio Adaptation (i.e. track) chosen for the last Period.
-     * Useful to determinate the duration of the current content.
-     * `undefined` if the audio track for the last Period has never been known yet.
-     * `null` if there are no chosen audio Adaptation.
-     */
-    const currLastAudioAdaptation : ISharedReference<undefined | Adaptation | null> =
-      createSharedReference(undefined);
-
-    /**
-     * The last known video Adaptation (i.e. track) chosen for the last Period.
-     * Useful to determinate the duration of the current content.
-     * `undefined` if the video track for the last Period has never been known yet.
-     * `null` if there are no chosen video Adaptation.
-     */
-    const currLastVideoAdaptation : ISharedReference<undefined | Adaptation | null> =
-      createSharedReference(undefined);
-
     /** Maintains the MediaSource's duration up-to-date with the Manifest */
-    const durationUpdater$ = DurationUpdater(manifest,
-                                             mediaSource,
-                                             currLastAudioAdaptation,
-                                             currLastVideoAdaptation);
+    const mediaDurationUpdater = new MediaDurationUpdater(manifest,
+                                                          mediaSource,
+                                                          mediaElement);
 
     const initialPeriod = manifest.getPeriodForTime(initialTime) ??
                           manifest.getNextPeriod(initialTime);
@@ -186,9 +162,9 @@ export default function createMediaSourceLoader(
             const lastPeriod = manifest.periods[manifest.periods.length - 1];
             if (evt.value.period.id === lastPeriod?.id) {
               if (evt.value.type === "audio") {
-                currLastAudioAdaptation.setValue(evt.value.adaptation);
+                mediaDurationUpdater.updateLastAudioAdaptation(evt.value.adaptation);
               } else if (evt.value.type === "video") {
-                currLastVideoAdaptation.setValue(evt.value.adaptation);
+                mediaDurationUpdater.updateLastVideoAdaptation(evt.value.adaptation);
               }
             }
             return observableOf(evt);
@@ -246,13 +222,13 @@ export default function createMediaSourceLoader(
         observableOf(evt) :
         emitLoadedEvent(observation$, mediaElement, segmentBuffersStore, false)));
 
-    return observableMerge(durationUpdater$,
-                           loadingEvts$,
+    return observableMerge(loadingEvts$,
                            playbackRate$,
                            stallAvoider$,
                            streams$,
                            streamEvents$
     ).pipe(finalize(() => {
+      mediaDurationUpdater.stop();
       // clean-up every created SegmentBuffers
       segmentBuffersStore.disposeAll();
     }));

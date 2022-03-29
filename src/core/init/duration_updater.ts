@@ -15,9 +15,7 @@
  */
 
 import {
-  catchError,
   combineLatest as observableCombineLatest,
-  defer as observableDefer,
   distinctUntilChanged,
   EMPTY,
   filter,
@@ -26,7 +24,6 @@ import {
   interval as observableInterval,
   map,
   merge as observableMerge,
-  mergeMap,
   Observable,
   of as observableOf,
   startWith,
@@ -40,8 +37,13 @@ import {
   onSourceEnded$,
 } from "../../compat/event_listeners";
 import log from "../../log";
-import Manifest from "../../manifest";
+import Manifest, {
+  Adaptation,
+} from "../../manifest";
 import { fromEvent } from "../../utils/event_emitter";
+import createSharedReference, {
+  IReadOnlySharedReference,
+} from "../../utils/reference";
 
 /** Number of seconds in a regular year. */
 const YEAR_IN_SECONDS = 365 * 24 * 3600;
@@ -53,41 +55,42 @@ const YEAR_IN_SECONDS = 365 * 24 * 3600;
  * each Manifest updates.
  * @param {Object} manifest
  * @param {MediaSource} mediaSource
+ * XXX TODO JSDoc
  * @returns {Observable}
  */
 export default function DurationUpdater(
   manifest : Manifest,
-  mediaSource : MediaSource
+  mediaSource : MediaSource,
+  lastAudioAdaptationRef : IReadOnlySharedReference<undefined | Adaptation | null>,
+  lastVideoAdaptationRef : IReadOnlySharedReference<undefined | Adaptation | null>
 ) : Observable<never> {
-  return observableDefer(() => {
-    let lastDurationUpdate: number | undefined;
-    return setMediaSourceDuration(mediaSource, manifest).pipe(
-      mergeMap((initialDurationUpdate) => {
-        // only update `lastDurationUpdate` if the MediaSource's duration has
-        // been updated.
-        if (initialDurationUpdate !== null) {
-          lastDurationUpdate = initialDurationUpdate;
-        }
-
-        return fromEvent(manifest, "manifestUpdate").pipe(
-          switchMap(() => setMediaSourceDuration(mediaSource,
-                                                 manifest,
-                                                 lastDurationUpdate)),
-          tap((durationUpdate) => {
-            if (durationUpdate !== null) {
-              lastDurationUpdate = durationUpdate;
-            }
-          })
-        );
-      }),
-      // NOTE As of now (RxJS 7.4.0), RxJS defines `ignoreElements` default
-      // first type parameter as `any` instead of the perfectly fine `unknown`,
-      // leading to linter issues, as it forbids the usage of `any`.
-      // This is why we're disabling the eslint rule.
-      /* eslint-disable-next-line @typescript-eslint/no-unsafe-argument */
-      ignoreElements()
-    );
-  });
+  const lastSetDuration = createSharedReference<number | undefined>(undefined);
+  return isMediaSourceOpened$(mediaSource).pipe(
+    switchMap((canUpdate) =>
+      canUpdate ? observableCombineLatest([lastAudioAdaptationRef.asObservable(),
+                                           lastVideoAdaptationRef.asObservable(),
+                                           fromEvent(manifest, "manifestUpdate")
+                                             .pipe(startWith(null))]) :
+                  EMPTY
+    ),
+    switchMap(([lastAudioAdapVal, lastVideoAdapVal]) =>
+      whenSourceBuffersEndedUpdates$(mediaSource.sourceBuffers).pipe(
+        take(1)
+      ).pipe(tap(() => {
+        const newDuration = setMediaSourceDuration(mediaSource,
+                                                   manifest,
+                                                   lastSetDuration.getValue(),
+                                                   lastAudioAdapVal,
+                                                   lastVideoAdapVal);
+        lastSetDuration.setValue(newDuration ?? undefined);
+      }))
+    ),
+    // NOTE As of now (RxJS 7.4.0), RxJS defines `ignoreElements` default
+    // first type parameter as `any` instead of the perfectly fine `unknown`,
+    // leading to linter issues, as it forbids the usage of `any`.
+    // This is why we're disabling the eslint rule.
+    /* eslint-disable-next-line @typescript-eslint/no-unsafe-argument */
+    ignoreElements());
 }
 
 /**
@@ -106,52 +109,37 @@ export default function DurationUpdater(
 function setMediaSourceDuration(
   mediaSource: MediaSource,
   manifest: Manifest,
-  lastSetDuration?: number
-): Observable<number | null> {
-  return isMediaSourceOpened$(mediaSource).pipe(
-    switchMap((isMediaSourceOpened) => {
-      if (!isMediaSourceOpened) {
-        return EMPTY;
-      }
-      return whenSourceBuffersEndedUpdates$(mediaSource.sourceBuffers);
-    }),
-    take(1),
-    map(() : number | null => {
-      const maximumPosition = manifest.getMaximumPosition();
-      const { isLive } = manifest;
-      // Some targets poorly support setting a very high number for durations.
-      // Yet, in live contents, we would prefer setting a value as high as possible
-      // to still be able to seek anywhere we want to (even ahead of the Manifest if
-      // we want to). As such, we put it at a safe default value of 2^32 excepted
-      // when the maximum position is already relatively close to that value, where
-      // we authorize exceptionally going over it.
-      const newDuration = !isLive ? maximumPosition :
-                                    Math.max(Math.pow(2, 32),
-                                             maximumPosition + YEAR_IN_SECONDS);
+  lastSetDuration: number | undefined,
+  lastAudioAdaptationRef : undefined | Adaptation | null,
+  lastVideoAdaptationRef : undefined | Adaptation | null
+): number | null {
+  const newDuration = getCalculatedContentDuration(manifest,
+                                                   lastAudioAdaptationRef,
+                                                   lastVideoAdaptationRef);
+  // XXX TODO
+  if (mediaSource.duration >= newDuration ||
+      // Even if the MediaSource duration is different than the duration that
+      // we want to set now, the last duration we wanted to set may be the same,
+      // as the MediaSource duration may have been changed by the browser.
+      //
+      // In that case, we do not want to update it.
+      //
+      newDuration === lastSetDuration) {
+    return null;
+  }
+  if (isNaN(mediaSource.duration) || !isFinite(mediaSource.duration) ||
+      newDuration - mediaSource.duration > 0.01) {
+    log.info("Init: Updating duration", newDuration);
+    try {
 
-      if (mediaSource.duration >= newDuration ||
-          // Even if the MediaSource duration is different than the duration that
-          // we want to set now, the last duration we wanted to set may be the same,
-          // as the MediaSource duration may have been changed by the browser.
-          //
-          // In that case, we do not want to update it.
-          //
-          newDuration === lastSetDuration) {
-        return null;
-      }
-      if (isNaN(mediaSource.duration) || !isFinite(mediaSource.duration) ||
-          newDuration - mediaSource.duration > 0.01) {
-        log.info("Init: Updating duration", newDuration);
-        mediaSource.duration = newDuration;
-        return newDuration;
-      }
-      return null;
-    }),
-    catchError((err) => {
+      mediaSource.duration = newDuration;
+    } catch (err) {
       log.warn("Duration Updater: Can't update duration on the MediaSource.", err);
-      return observableOf(null);
-    })
-  );
+      return null;
+    }
+    return newDuration;
+  }
+  return null;
 }
 
 /**
@@ -187,6 +175,94 @@ function whenSourceBuffersEndedUpdates$(
     }),
     map(() => undefined)
   );
+}
+
+function getCalculatedContentDuration(
+  manifest : Manifest,
+  lastAudioAdaptationRef : undefined | Adaptation | null,
+  lastVideoAdaptationRef : undefined | Adaptation | null
+) : number {
+  if (manifest.isDynamic) {
+    const maximumPosition = manifest.getMaximumPosition();
+    // Some targets poorly support setting a very high number for durations.
+    // Yet, in dynamic contents, we would prefer setting a value as high as possible
+    // to still be able to seek anywhere we want to (even ahead of the Manifest if
+    // we want to). As such, we put it at a safe default value of 2^32 excepted
+    // when the maximum position is already relatively close to that value, where
+    // we authorize exceptionally going over it.
+    return Math.max(Math.pow(2, 32), maximumPosition + YEAR_IN_SECONDS);
+  } else {
+    if (lastAudioAdaptationRef === undefined ||
+        lastVideoAdaptationRef === undefined)
+    {
+      return manifest.getMaximumPosition();
+    } else if (lastAudioAdaptationRef === null) {
+      if (lastVideoAdaptationRef === null) {
+        return manifest.getMaximumPosition();
+      } else {
+        const lastVideoPosition =
+          getLastPositionFromAdaptation(lastVideoAdaptationRef);
+        if (typeof lastVideoPosition !== "number") {
+          return manifest.getMaximumPosition();
+        }
+        return lastVideoPosition;
+      }
+    } else if (lastVideoAdaptationRef === null) {
+      const lastAudioPosition =
+        getLastPositionFromAdaptation(lastAudioAdaptationRef);
+      if (typeof lastAudioPosition !== "number") {
+        return manifest.getMaximumPosition();
+      }
+      return lastAudioPosition;
+    } else {
+      const lastAudioPosition = getLastPositionFromAdaptation(
+        lastAudioAdaptationRef
+      );
+      const lastVideoPosition = getLastPositionFromAdaptation(
+        lastVideoAdaptationRef
+      );
+      if (typeof lastAudioPosition !== "number" ||
+          typeof lastVideoPosition !== "number")
+      {
+        return manifest.getMaximumPosition();
+      } else {
+        return Math.min(lastAudioPosition, lastVideoPosition);
+      }
+    }
+  }
+}
+
+/**
+ * Returns "last time of reference" from the adaptation given.
+ * `undefined` if a time could not be found.
+ * Null if the Adaptation has no segments (it could be that it didn't started or
+ * that it already finished for example).
+ *
+ * We consider the earliest last time from every representations in the given
+ * adaptation.
+ * @param {Object} adaptation
+ * @returns {Number|undefined|null}
+ */
+function getLastPositionFromAdaptation(
+  adaptation: Adaptation
+) : number | undefined | null {
+  const { representations } = adaptation;
+  let min : null | number = null;
+  // XXX TODO optimize when index is the same?
+  for (let i = 0; i < representations.length; i++) {
+    const lastPosition = representations[i].index.getLastPosition();
+    if (lastPosition === undefined) { // we cannot tell
+      return undefined;
+    }
+    if (lastPosition !== null) {
+      min = min == null ? lastPosition :
+                          Math.min(min, lastPosition);
+    }
+  }
+  if (min === null) { // It means that all positions were null === no segments (yet?)
+    return null;
+  }
+  return min;
 }
 
 /**

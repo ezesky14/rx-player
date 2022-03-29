@@ -30,8 +30,13 @@ import {
 } from "rxjs";
 import { MediaError } from "../../errors";
 import log from "../../log";
-import Manifest from "../../manifest";
-import { IReadOnlySharedReference } from "../../utils/reference";
+import Manifest, {
+  Adaptation,
+} from "../../manifest";
+import createSharedReference, {
+  IReadOnlySharedReference,
+  ISharedReference,
+} from "../../utils/reference";
 import ABRManager from "../abr";
 import { PlaybackObserver } from "../api";
 import { SegmentFetcherCreator } from "../fetchers";
@@ -103,8 +108,29 @@ export default function createMediaSourceLoader(
     initialTime : number,
     autoPlay : boolean
   ) : Observable<IMediaSourceLoaderEvent> {
+    /**
+     * The last known audio Adaptation (i.e. track) chosen for the last Period.
+     * Useful to determinate the duration of the current content.
+     * `undefined` if the audio track for the last Period has never been known yet.
+     * `null` if there are no chosen audio Adaptation.
+     */
+    const currLastAudioAdaptation : ISharedReference<undefined | Adaptation | null> =
+      createSharedReference(undefined);
+
+    /**
+     * The last known video Adaptation (i.e. track) chosen for the last Period.
+     * Useful to determinate the duration of the current content.
+     * `undefined` if the video track for the last Period has never been known yet.
+     * `null` if there are no chosen video Adaptation.
+     */
+    const currLastVideoAdaptation : ISharedReference<undefined | Adaptation | null> =
+      createSharedReference(undefined);
+
     /** Maintains the MediaSource's duration up-to-date with the Manifest */
-    const durationUpdater$ = DurationUpdater(manifest, mediaSource);
+    const durationUpdater$ = DurationUpdater(manifest,
+                                             mediaSource,
+                                             currLastAudioAdaptation,
+                                             currLastVideoAdaptation);
 
     const initialPeriod = manifest.getPeriodForTime(initialTime) ??
                           manifest.getNextPeriod(initialTime);
@@ -156,6 +182,17 @@ export default function createMediaSourceLoader(
     ).pipe(
       mergeMap((evt) : Observable<IMediaSourceLoaderEvent> => {
         switch (evt.type) {
+          case "adaptationChange": {
+            const lastPeriod = manifest.periods[manifest.periods.length - 1];
+            if (evt.value.period.id === lastPeriod?.id) {
+              if (evt.value.type === "audio") {
+                currLastAudioAdaptation.setValue(evt.value.adaptation);
+              } else if (evt.value.type === "video") {
+                currLastVideoAdaptation.setValue(evt.value.adaptation);
+              }
+            }
+            return observableOf(evt);
+          }
           case "end-of-stream":
             log.debug("Init: end-of-stream order received.");
             return maintainEndOfStream(mediaSource).pipe(
